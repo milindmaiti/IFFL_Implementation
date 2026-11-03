@@ -36,7 +36,7 @@ import numpy as np
 from iffl.evaluate import radius_ratio
 from iffl.instance import Instance
 from iffl.lp import RestrictedLP, solve_restricted_lp
-from iffl.lp_rounding import Solution
+from iffl.lp_rounding import Solution, evaluate_open_set
 
 TOL = 1e-9
 
@@ -317,21 +317,24 @@ def primal_dual_iffl(
         check_fairness = uniform
 
     dg = grow_duals(inst)
-    opened, assignment, pdiag = prune_and_assign(inst, dg)
+    opened, witness_assignment, pdiag = prune_and_assign(inst, dg)
 
+    # The witness assignment exists to carry the proof: routing j through a shared
+    # witness is what bounds d(j, i) by 3R and underpins C + 3F <= 3 sum(alpha).  It is
+    # not what the algorithm should return.  Serving each client from the closest open
+    # facility can only shorten its connection, so both bounds survive a fortiori --
+    # d(j, S) <= d(j, witness) <= 3R, and a smaller C keeps C + 3F under the same
+    # ceiling.  The witness cost is kept alongside for comparison.
+    sol = evaluate_open_set(inst, opened)
+    assignment = sol.assignment
     dists = inst.d[np.arange(inst.n), assignment]
-    facility_cost = float(inst.f[opened].sum())
-    connection_cost = float(dists.sum())
-    alpha_sum = float(dg.alpha.sum())
-    ratio = radius_ratio(dists, inst.R)
+    facility_cost = sol.facility_cost
+    connection_cost = sol.connection_cost
+    ratio = sol.radius_ratio
 
-    sol = Solution(
-        open_facilities=opened,
-        assignment=assignment,
-        facility_cost=facility_cost,
-        connection_cost=connection_cost,
-        radius_ratio=ratio,
-    )
+    witness_dists = inst.d[np.arange(inst.n), witness_assignment]
+    witness_connection_cost = float(witness_dists.sum())
+    alpha_sum = float(dg.alpha.sum())
 
     # Weak duality holds unconditionally, so a breach here means the freezing rules are
     # wrong rather than the bound being loose.
@@ -373,6 +376,12 @@ def primal_dual_iffl(
         "mean_radius_ratio": float(ratio.mean()),
         "n_open": int(opened.size),
         "n_events": dg.n_events,
+        "witness_assignment": witness_assignment,
+        "witness_connection_cost": witness_connection_cost,
+        "witness_cost": facility_cost + witness_connection_cost,
+        "witness_max_radius_ratio": float(
+            radius_ratio(witness_dists, inst.R).max()
+        ),
         "diagnostics": {**dg.diagnostics, **pdiag},
         "solution": sol,
     }

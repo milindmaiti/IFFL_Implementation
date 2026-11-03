@@ -148,3 +148,37 @@ def test_missing_radii_rejected():
     inst = load_dataset("synth-225-25")
     with pytest.raises(ValueError, match="no radii"):
         grow_duals(inst)
+
+
+@pytest.mark.parametrize("name,q", UNIFORM_CASES)
+def test_reported_assignment_is_nearest_open_facility(name, q):
+    """The witness routing exists to carry the proof, not to be the output.  What is
+    returned serves each client from the closest open facility."""
+    inst = _uniform_instance(name, q)
+    res = primal_dual_iffl(inst)
+    sol = res["solution"]
+    nearest = sol.open_facilities[inst.d[:, sol.open_facilities].argmin(axis=1)]
+    assert np.array_equal(
+        inst.d[np.arange(inst.n), sol.assignment],
+        inst.d[np.arange(inst.n), nearest],
+    )
+
+
+@pytest.mark.parametrize("name,q", UNIFORM_CASES)
+def test_nearest_assignment_never_worse_than_the_witness_routing(name, q):
+    """Both of the paper's bounds survive the switch a fortiori: a shorter connection
+    keeps d(j,S) <= 3R, and a smaller C keeps C + 3F under the same ceiling."""
+    inst = _uniform_instance(name, q)
+    res = primal_dual_iffl(inst)
+    assert res["cost"] <= res["witness_cost"] + 1e-9
+    assert res["max_radius_ratio"] <= res["witness_max_radius_ratio"] + 1e-9
+    assert res["connection_cost"] + 3 * res["facility_cost"] <= 3 * res["alpha_sum"] + 1e-5
+
+
+def test_witness_routing_is_still_computed_and_bounded():
+    """The witness assignment is kept for comparison, and must itself respect 3R --
+    that is the quantity the proof actually bounds."""
+    for name, q in UNIFORM_CASES:
+        res = primal_dual_iffl(_uniform_instance(name, q))
+        assert res["witness_max_radius_ratio"] <= 3.0 + 1e-6
+        assert np.all(np.isin(res["witness_assignment"], res["solution"].open_facilities))

@@ -133,8 +133,8 @@ From `results/results.csv` (3285 rows; 657 configurations x 5 algorithms):
 | algorithm | mean cost / LP | max | worst radius ratio |
 |---|---|---|---|
 | A: LP rounding | 1.017 | 1.602 | 3.000 (bound 3, 0 violations) |
-| B: primal-dual, uniform radii | 1.024 | - | 3.000 (bound 3, 0 violations) |
-| B: primal-dual, nonuniform radii | 1.025 | 1.208 | exceeds 3 in 78/424 configs |
+| B: primal-dual, uniform radii | 1.012 | - | 3.000 (bound 3, 0 violations) |
+| B: primal-dual, nonuniform radii | 1.012 | 1.200 | exceeds 3 in 76/424 configs |
 | **C: greedy (strictly fair)** | **1.006** | **1.196** | **1.000** (0 violations) |
 | Baseline: threshold rounding | 1.012 | 2.648 | opens nothing on a fractional LP |
 | Baseline: set-cover greedy | 1.781 | 40.43 | 1.000 by construction |
@@ -143,18 +143,30 @@ From `results/results.csv` (3285 rows; 657 configurations x 5 algorithms):
   ratio stayed under 1.725 in all 657 configurations (max observed 1.602, on a
   fractional instance).
 * Approach B satisfied `C + 3F <= 3 sum(alpha)` in all 233 uniform-radius configurations.
-* On nonuniform radii Approach B exceeds `3R_j` in 78 of 424 configurations, worst finite
+* On nonuniform radii Approach B exceeds `3R_j` in 76 of 424 configurations, worst finite
   ratio 44.1 - the concrete form of Remark 2.3, and the gap Approach A exists to close.
 * **Approach C was both the fairest and the cheapest on this data**: strictly fair in all
   657 configurations, mean ratio 1.006, and never above 1.861 (max 1.196). On the 54
-  fractional-LP configurations where the comparison is meaningful it averaged 1.042
-  against A's 1.173. Worth keeping in proportion, though - these are the
+  fractional-LP configurations where the comparison is meaningful it averaged 1.044
+  against A's 1.181. Worth keeping in proportion, though - these are the
   *empirical* ratios on eight geometric datasets, not worst cases. A and B carry proved
   worst-case guarantees that C, in the restricted setting, does not.
 * A structural difference the tests pin down: C is strictly fair, so the restricted LP is
   a genuine lower bound on it and its ratio never drops below 1. A and B are bicriteria
   and can *undercut* the LP (B's minimum is 0.81) by serving clients outside their radii -
   cheaper than any strictly fair solution can be.
+
+### A note on Approach B's assignment
+
+The primal-dual pruning routes a client either directly to its witness facility or
+indirectly through a shared witness. That routing exists to carry the proof: it is what
+bounds `d(j,i)` by `3R` and underpins `C + 3F <= 3 sum(alpha)`. It is not what the
+algorithm should return. Each client is therefore served from the **closest open
+facility**, which can only shorten its connection, so both bounds survive a fortiori -
+`d(j,S) <= d(j, witness) <= 3R`, and a smaller `C` stays under the same ceiling. The
+witness routing is still computed and reported (`witness_cost`,
+`witness_max_radius_ratio`) for comparison; serving from the nearest open facility
+instead is worth about 1% of cost on average, and tightens the worst radius ratio too.
 
 Figures are in `results/figures/` (light and dark), each with a CSV table view. The
 tradeoff panel is restricted to uniform radii, the only regime where all three are
