@@ -156,6 +156,17 @@ def summarize(df: pd.DataFrame) -> None:
                 print(f"    {len(infinite)} of those are infinite: a client sits exactly on a "
                       f"facility site, so R_j = 0 and any positive distance violates it")
 
+    c = ok[ok["algo"] == "greedy"]
+    if len(c):
+        strict_viol = c[c["max_radius_ratio"] > 1.0 + 1e-6]
+        print(f"\n[C] greedy        strictly fair: worst radius ratio = "
+              f"{c['max_radius_ratio'].max():.4f} (bound 1)  violations: {len(strict_viol)}")
+        print(f"    cost ratio: mean {c['cost_ratio'].mean():.4f}, max {c['cost_ratio'].max():.4f}"
+              f"   over 1.861 in {len(c[c['cost_ratio'] > 1.861])}/{len(c)} configs")
+        print("    (1.861 is the unrestricted-UFL dual-fitting bound; whether it "
+              "transfers to\n     the radius-restricted version is not proved here, "
+              "only measured)")
+
     if (df["error"] != "").any():
         print("\nErrors:")
         print(df[df["error"] != ""].groupby(["algo", "error"]).size().to_string())

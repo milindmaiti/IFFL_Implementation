@@ -40,7 +40,7 @@ LIGHT = {
     "muted": "#52514e",
     "grid": "#dcdbd6",
     "rule": "#8c8b85",
-    "series": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"],
+    "series": ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4"],
 }
 DARK = {
     "surface": "#1a1a19",
@@ -48,16 +48,18 @@ DARK = {
     "muted": "#c3c2b7",
     "grid": "#3a3a37",
     "rule": "#8c8b85",
-    "series": ["#3987e5", "#d95926", "#199e70", "#c98500"],
+    "series": ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181"],
 }
 
 ALGO_LABEL = {
     "lp_rounding": "A: LP rounding",
     "primal_dual": "B: primal-dual",
+    "greedy": "C: greedy (strictly fair)",
     "baseline_threshold": "Baseline: threshold",
     "baseline_greedy": "Baseline: greedy fair",
 }
-ALGO_ORDER = ["lp_rounding", "primal_dual", "baseline_threshold", "baseline_greedy"]
+ALGO_ORDER = ["lp_rounding", "primal_dual", "greedy",
+              "baseline_threshold", "baseline_greedy"]
 
 
 def style(pal: dict) -> None:
@@ -179,33 +181,92 @@ def fig_fractional_configs(df, pal, out: Path):
 
 
 def fig_cost_scale(df, pal, out: Path):
-    """How the cost ratio moves with the opening-cost scale, for the two algorithms."""
-    sub = df[df["algo"].isin(["lp_rounding", "primal_dual"]) & df["cost_scale"].notna()]
+    """How the cost ratio moves with the opening-cost scale, for the three algorithms."""
+    algos = ["lp_rounding", "primal_dual", "greedy"]
+    sub = df[df["algo"].isin(algos) & df["cost_scale"].notna()]
     piv = sub.pivot_table(index="cost_scale", columns="algo",
                           values="cost_ratio", aggfunc="mean")
     fig, ax = plt.subplots(figsize=(8.2, 4.0))
     x = np.arange(len(piv))
-    width = 0.38
-    for k, algo in enumerate(["lp_rounding", "primal_dual"]):
+    width = 0.27
+    for k, algo in enumerate(algos):
         if algo not in piv:
             continue
-        ax.bar(x + (k - 0.5) * width, piv[algo], width * 0.94,
+        ax.bar(x + (k - 1) * width, piv[algo], width * 0.9,
                color=pal["series"][k], edgecolor=pal["surface"], linewidth=2,
                label=ALGO_LABEL[algo])
-        for xi, v in zip(x + (k - 0.5) * width, piv[algo]):
-            ax.text(xi, v + 0.012, f"{v:.3f}", ha="center", color=pal["text"], fontsize=8)
+        for xi, v in zip(x + (k - 1) * width, piv[algo]):
+            ax.text(xi, v + 0.012, f"{v:.3f}", ha="center", color=pal["text"], fontsize=7)
     ax.axhline(1.0, color=pal["rule"], lw=1.2)
     ax.set_xticks(x, [f"{c:g}" for c in piv.index])
     ax.set_xlabel("opening-cost scale (multiples of mean nearest-facility distance)")
     ax.set_ylabel("mean cost / LP bound")
     ax.set_ylim(0.9, max(1.2, float(np.nanmax(piv.to_numpy())) * 1.08))
     ax.legend(frameon=False, labelcolor=pal["text"])
-    _finish(ax, pal, "Both algorithms track the LP bound closely across cost scales")
+    _finish(ax, pal, "The greedy stays closest to the LP bound as opening costs rise",
+            "all three track it closely; B drifts most at high cost scales")
     ax.grid(axis="y", lw=0.6, alpha=0.7)
     fig.tight_layout()
     fig.savefig(out.with_suffix(".png"), dpi=200)
     plt.close(fig)
     piv.to_csv(out.with_suffix(".csv"))
+
+
+def fig_tradeoff(df, pal, out: Path):
+    """What each algorithm buys and what it pays: fairness on x, cost on y.
+
+    Restricted to **uniform radii**, the only regime where all three are comparable:
+    Approach B has no proved bound otherwise, and its worst nonuniform ratio of 44 would
+    push the other two off the axis without saying anything meaningful.  The nonuniform
+    behaviour has its own figure.
+
+    One point per algorithm, so the three sit within the all-pairs colour cap.  The axes
+    are two different quantities, not two scales of one, so this is a plain scatter and
+    not a dual-axis chart.
+    """
+    algos = ["lp_rounding", "primal_dual", "greedy"]
+    uni = df[df["radius_uniform"] == True]  # noqa: E712
+    fig, ax = plt.subplots(figsize=(8.2, 4.4))
+    rows = []
+    for k, algo in enumerate(algos):
+        a = uni[uni["algo"] == algo]
+        if not len(a):
+            continue
+        finite = a[np.isfinite(a["max_radius_ratio"])]
+        x = float(finite["max_radius_ratio"].max())
+        y = float(a["cost_ratio"].mean())
+        ax.scatter([x], [y], s=190, color=pal["series"][k], zorder=3,
+                   edgecolor=pal["surface"], linewidth=2, label=ALGO_LABEL[algo])
+        rows.append({"algo": algo, "worst_radius_ratio": x, "mean_cost_ratio": y,
+                     "n_configs": len(a)})
+    # Offsets keep the two labels at x = 3 from landing on top of each other.
+    offsets = {"lp_rounding": (0, 18), "primal_dual": (0, -26), "greedy": (0, 18)}
+    for k, algo in enumerate(algos):
+        r = next((r for r in rows if r["algo"] == algo), None)
+        if r is None:
+            continue
+        ax.annotate(ALGO_LABEL[algo], (r["worst_radius_ratio"], r["mean_cost_ratio"]),
+                    textcoords="offset points", xytext=offsets[algo], ha="center",
+                    color=pal["text"], fontsize=9)
+    ax.axvline(1.0, color=pal["rule"], lw=1.0, ls=":")
+    ax.axvline(3.0, color=pal["rule"], lw=1.2, ls="--")
+    lo = min(r["mean_cost_ratio"] for r in rows) if rows else 1.0
+    hi = max(r["mean_cost_ratio"] for r in rows) if rows else 1.1
+    ax.set_ylim(1.0, hi + (hi - lo) * 0.9 + 0.004)
+    ax.text(1.04, 1.001, "strictly fair", color=pal["muted"], fontsize=9, va="bottom")
+    ax.text(2.96, 1.001, "3R bicriteria bound", color=pal["muted"], fontsize=9,
+            va="bottom", ha="right")
+    ax.set_xlabel("worst d(j, sigma(j)) / R_j observed  (lower is fairer)")
+    ax.set_ylabel("mean cost / LP bound  (lower is cheaper)")
+    ax.set_xlim(0.6, 3.5)
+    _finish(ax, pal, "The strictly fair greedy is both fairer and cheaper here",
+            f"uniform-radius configurations only ({len(uni[uni.algo == 'greedy'])} of them); "
+            "y starts at the LP bound")
+    ax.grid(axis="y", lw=0.6, alpha=0.7)
+    fig.tight_layout()
+    fig.savefig(out.with_suffix(".png"), dpi=200)
+    plt.close(fig)
+    pd.DataFrame(rows).to_csv(out.with_suffix(".csv"), index=False)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -226,7 +287,8 @@ def main(argv: list[str] | None = None) -> int:
     fig_radius_uniform_vs_not(df, pal, args.out / f"radius-uniform-vs-nonuniform{sfx}")
     fig_fractional_configs(df, pal, args.out / f"approach-a-fractional{sfx}")
     fig_cost_scale(df, pal, args.out / f"cost-ratio-by-cost-scale{sfx}")
-    print(f"wrote 4 figures (+ CSV table views) to {args.out}/")
+    fig_tradeoff(df, pal, args.out / f"fairness-cost-tradeoff{sfx}")
+    print(f"wrote 5 figures (+ CSV table views) to {args.out}/")
     return 0
 
 

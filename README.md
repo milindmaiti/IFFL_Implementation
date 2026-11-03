@@ -1,25 +1,35 @@
 # Individually Fair Facility Location
 
-Python implementation of two approximation algorithms for **Individually Fair Facility
+Python implementation of three approximation algorithms for **Individually Fair Facility
 Location (IFFL)**, run over the datasets in the sibling [`Fair-FL`](../Fair-FL) repo.
 
 In IFFL every client `j` carries a personal fairness radius `R_j`, and the solution must
 serve `j` within a bounded multiple of it. That is *individual* fairness, as opposed to
 the *group* fairness (per-group outlier budgets) the Fair-FL Julia notebooks implement.
 
-## The two algorithms
+## The three algorithms
 
-| | Approach A | Approach B |
-|---|---|---|
-| source | `lp_fl_approach.pdf` | `Individually_Fair_FL.pdf` |
-| method | LP rounding | primal-dual (Jain-Vazirani style) |
-| guarantee | `E[cost] <= 1.725 OPT_fair`, `d(j,S) <= 3R_j` always | `C + 3F <= 3 OPT_LP`, `d(j,sigma(j)) <= 3R` |
-| radii | arbitrary **nonuniform** | **uniform only** (Remark 2.3) |
-| module | `iffl/lp_rounding.py` | `iffl/primal_dual.py` |
+| | Approach A | Approach B | Approach C |
+|---|---|---|---|
+| source | `lp_fl_approach.pdf` | `Individually_Fair_FL.pdf` | Williamson & Shmoys Alg. 9.2 |
+| method | LP rounding | primal-dual (Jain-Vazirani style) | greedy with savings |
+| fairness | `d(j,S) <= 3R_j` always | `d(j,sigma(j)) <= 3R` | `d(j,sigma(j)) <= R_j` (**strict**) |
+| cost | `E[cost] <= 1.725 OPT_fair` | `C + 3F <= 3 OPT_LP` | 1.861 unrestricted; not proved here |
+| radii | arbitrary **nonuniform** | **uniform only** (Remark 2.3) | arbitrary |
+| module | `iffl/lp_rounding.py` | `iffl/primal_dual.py` | `iffl/greedy.py` |
 
-Both restrict to the admissible edge set `E_R = {(i,j) : d(i,j) <= R_j}`. That
-restriction is what makes the LP optimum a valid lower bound on `OPT_fair`, and it is
-the only source of Approach B's fairness guarantee.
+All three restrict to the admissible edge set `E_R = {(i,j) : d(i,j) <= R_j}`. That
+restriction is what makes the LP optimum a valid lower bound on `OPT_fair`, it is the
+only source of Approach B's fairness guarantee, and it is the whole of Approach C's
+adaptation to the fair setting.
+
+Approach C is the odd one out in a useful way: forbidding inadmissible pairs at every
+step makes it **strictly fair**, a radius ratio of 1 rather than the 3 the other two
+settle for. So it is a `(rho, 1)` algorithm against their `(1.725, 3)` and `(3, 3)`,
+and the question it answers is what that stricter fairness costs. Its 1.861 dual-fitting
+bound is for *unrestricted* UFL; the argument plausibly transfers, since the restricted
+dual constraint involves only `E_R` pairs, but nothing here asserts it -- the ratio is
+measured like any other observable.
 
 The cost and fairness bounds are *not* checked the same way, because the papers do not
 state them the same way. Approach A's `3R_j` is deterministic, so it is asserted on
@@ -49,6 +59,7 @@ iffl/
   lp.py           restricted LP over E_R, via scipy + HiGHS
   lp_rounding.py  Approach A
   primal_dual.py  Approach B
+  greedy.py       Approach C
   synthetic.py    odd-cycle instances with a half-integral LP
   evaluate.py     shared metrics and two baselines
   configs.py      the experiment grid
@@ -117,15 +128,16 @@ Four things that are easy to get wrong here, each covered by a test:
 
 ## Results
 
-From `results/results.csv` (2628 rows; 657 configurations x 4 algorithms):
+From `results/results.csv` (3285 rows; 657 configurations x 5 algorithms):
 
-| algorithm | mean cost / LP | worst radius ratio |
-|---|---|---|
-| A: LP rounding | 1.017 | 3.000 (bound 3, 0 violations) |
-| B: primal-dual, uniform radii | - | 3.000 (bound 3, 0 violations) |
-| B: primal-dual, nonuniform radii | - | exceeds 3 in 78/424 configs |
-| Baseline: threshold rounding | 1.012 | opens nothing on a fractional LP |
-| Baseline: strictly fair greedy | 1.781 | 1.000 by construction |
+| algorithm | mean cost / LP | max | worst radius ratio |
+|---|---|---|---|
+| A: LP rounding | 1.017 | 1.602 | 3.000 (bound 3, 0 violations) |
+| B: primal-dual, uniform radii | 1.024 | - | 3.000 (bound 3, 0 violations) |
+| B: primal-dual, nonuniform radii | 1.025 | 1.208 | exceeds 3 in 78/424 configs |
+| **C: greedy (strictly fair)** | **1.006** | **1.196** | **1.000** (0 violations) |
+| Baseline: threshold rounding | 1.012 | 2.648 | opens nothing on a fractional LP |
+| Baseline: set-cover greedy | 1.781 | 40.43 | 1.000 by construction |
 
 * Approach A never violated `3R_j`, on any trial of any configuration, and its mean cost
   ratio stayed under 1.725 in all 657 configurations (max observed 1.602, on a
@@ -133,10 +145,20 @@ From `results/results.csv` (2628 rows; 657 configurations x 4 algorithms):
 * Approach B satisfied `C + 3F <= 3 sum(alpha)` in all 233 uniform-radius configurations.
 * On nonuniform radii Approach B exceeds `3R_j` in 78 of 424 configurations, worst finite
   ratio 44.1 - the concrete form of Remark 2.3, and the gap Approach A exists to close.
-* Both algorithms track the LP bound closely; the strictly fair greedy baseline, which
-  never uses the bicriteria slack, costs 78% more on average.
+* **Approach C was both the fairest and the cheapest on this data**: strictly fair in all
+  657 configurations, mean ratio 1.006, and never above 1.861 (max 1.196). On the 54
+  fractional-LP configurations where the comparison is meaningful it averaged 1.042
+  against A's 1.173. Worth keeping in proportion, though - these are the
+  *empirical* ratios on eight geometric datasets, not worst cases. A and B carry proved
+  worst-case guarantees that C, in the restricted setting, does not.
+* A structural difference the tests pin down: C is strictly fair, so the restricted LP is
+  a genuine lower bound on it and its ratio never drops below 1. A and B are bicriteria
+  and can *undercut* the LP (B's minimum is 0.81) by serving clients outside their radii -
+  cheaper than any strictly fair solution can be.
 
-Figures are in `results/figures/` (light and dark), each with a CSV table view.
+Figures are in `results/figures/` (light and dark), each with a CSV table view. The
+tradeoff panel is restricted to uniform radii, the only regime where all three are
+comparable - B has no proved bound otherwise.
 
 ## Environment
 

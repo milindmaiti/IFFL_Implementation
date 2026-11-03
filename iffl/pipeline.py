@@ -11,6 +11,7 @@ from iffl import costs as costs_mod
 from iffl import radii as radii_mod
 from iffl.configs import Config, radius_rank_for
 from iffl.evaluate import greedy_nearest_feasible, threshold_round
+from iffl.greedy import greedy_iffl
 from iffl.instance import Instance
 from iffl.loaders import load_dataset
 from iffl.lp import solve_restricted_lp
@@ -149,6 +150,29 @@ def run_config(
         if strict:
             raise
         rows.append(_row(cfg, inst, lp, "primal_dual", runtime_s=lp_time, seed=seed,
+                         error=f"{type(exc).__name__}: {exc}"))
+
+    # --- Approach C: greedy (Williamson & Shmoys Alg. 9.2), restricted to E_R.
+    # Strictly fair by construction, so its radius ratio is asserted against 1, not 3. ---
+    try:
+        t0 = time.perf_counter()
+        c = greedy_iffl(inst, lp=lp, check_fairness=strict)
+        rows.append(_row(cfg, inst, lp, "greedy",
+                         cost=c["cost"],
+                         cost_ratio=c["cost_ratio"],
+                         cost_ratio_max=c["cost_ratio"],
+                         max_radius_ratio=c["max_radius_ratio"],
+                         mean_radius_ratio=c["mean_radius_ratio"],
+                         n_open=c["n_open"],
+                         trials=1,
+                         n_rounds=c["diagnostics"]["n_rounds"],
+                         n_reopened=c["diagnostics"]["n_reopened"],
+                         runtime_s=time.perf_counter() - t0 + lp_time,
+                         seed=seed, error=""))
+    except (AssertionError, ValueError, RuntimeError) as exc:
+        if strict:
+            raise
+        rows.append(_row(cfg, inst, lp, "greedy", runtime_s=lp_time, seed=seed,
                          error=f"{type(exc).__name__}: {exc}"))
 
     # --- Baselines. ---
