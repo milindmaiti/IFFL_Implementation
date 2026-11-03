@@ -25,8 +25,23 @@ DEFAULT_SCALES = (0.1, 0.5, 1.0, 2.0, 5.0, 10.0)
 
 
 def distance_unit(inst: Instance) -> float:
-    """Mean nearest-facility distance -- the yardstick costs are expressed in."""
-    return float(inst.nearest_facility_dist.mean())
+    """A positive length scale for the instance, used as the unit for opening costs.
+
+    Normally the mean nearest-facility distance.  On the UFLP workbooks, though, clients
+    and facilities are the same point set, so that mean is exactly 0 and every
+    synthesized cost would come out 0 -- the LP would then open all m facilities for
+    free and report an objective of 0, making every cost ratio a 0/0 form.  Falling back
+    to the next facility rank keeps the unit positive and the sweep meaningful.
+    """
+    from iffl.radii import facility_distance_basis
+
+    for rank in range(1, min(inst.m, 5) + 1):
+        unit = float(facility_distance_basis(inst, rank).mean())
+        if unit > 0:
+            return unit
+    # Degenerate fallback: all candidate facilities coincide with all clients.
+    positive = inst.d[inst.d > 0]
+    return float(positive.mean()) if positive.size else 1.0
 
 
 def synthesize(

@@ -1,0 +1,71 @@
+"""The experiment grid, in one place so scripts and tests agree on it."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from iffl.loaders import ALL_DATASETS, XLSX_DATASETS
+
+#: Odd-cycle sizes added to the sweep.  Every real dataset has an integral LP, so these
+#: are the only instances that exercise Approach A's fractional machinery.
+SYNTHETIC_DATASETS = ("oddcycle-5", "oddcycle-9", "oddcycle-15")
+
+DATASETS = tuple(ALL_DATASETS) + SYNTHETIC_DATASETS
+
+#: (scheme, param) pairs.  Nonuniform schemes are the regime Approach A is built for;
+#: the uniform ones are the only regime where Approach B's bound is proved.
+RADIUS_GRID = (
+    ("nearest_facility_multiple", 1.0),
+    ("nearest_facility_multiple", 1.5),
+    ("nearest_facility_multiple", 2.0),
+    ("nearest_facility_multiple", 3.0),
+    ("nearest_facility_multiple", 4.0),
+    ("uniform", 0.25),
+    ("uniform", 0.5),
+    ("uniform", 0.75),
+    ("uniform", 0.9),
+    ("jkl_client_knn", 5),
+    ("jkl_client_knn", 10),
+    ("jkl_client_knn", 20),
+)
+
+#: Synthesized cost multiples.  ``None`` means "use the dataset's own costs", which
+#: only the synth pairs and the two workbooks have; it keeps results tied to the
+#: published data, while the numeric scales make all datasets directly comparable.
+COST_SCALES = (None, 0.1, 0.5, 1.0, 2.0, 5.0, 10.0)
+
+
+def has_native_costs(dataset: str) -> bool:
+    """True for datasets whose facility file carries real opening costs."""
+    return not dataset.startswith(("adult-", "bank-"))
+
+
+def radius_rank_for(dataset: str) -> int:
+    """Which facility rank a distance-based radius scheme should key on.
+
+    The UFLP workbooks use the same point set for clients and facilities, so a rank-1
+    basis is identically zero and collapses every radius to 0.  Rank 2 is used there so
+    the instances stay non-trivial; see :func:`iffl.radii.facility_distance_basis`.
+    """
+    return 2 if dataset in XLSX_DATASETS else 1
+
+
+@dataclass(frozen=True)
+class Config:
+    """One point of the sweep."""
+
+    dataset: str
+    scheme: str
+    param: float
+    cost_scale: float | None
+    cost_mode: str = "constant"
+
+    @property
+    def native_costs(self) -> bool:
+        """``cost_scale is None`` selects the dataset's own opening costs."""
+        return self.cost_scale is None
+
+    @property
+    def label(self) -> str:
+        f = "native" if self.native_costs else self.cost_scale
+        return f"{self.dataset}|{self.scheme}={self.param}|f={f}"

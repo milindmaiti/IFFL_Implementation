@@ -1,21 +1,26 @@
 """Synthetic instances, including ones whose restricted LP is genuinely fractional.
 
-Every one of the eight Fair-FL datasets yields an *integral* LP optimum under every
-radius scheme tried.  That is common for geometric facility-location instances, and it
-means Approach A degenerates there: with ``y* in {0,1}`` each client's close set lies
-inside a single facility, so the rounding opens exactly the LP's facilities and returns
-cost ratio 1.000 deterministically.  Correct, but it exercises none of the interesting
-machinery -- facility splitting across shared supports, the global filtering refinement,
-cluster formation, or the randomized rounding itself.
+Most configurations of the eight Fair-FL datasets yield an *integral* LP optimum, which
+is common for geometric facility-location instances.  Where that happens Approach A
+degenerates: with ``y* in {0,1}`` each client's close set lies inside a single facility,
+so the rounding opens exactly the LP's facilities and returns cost ratio 1.000
+deterministically.  Correct, but it exercises none of the interesting machinery --
+facility splitting across shared supports, the global filtering refinement, cluster
+formation, or the randomized rounding itself.
 
-:func:`odd_cycle_instance` builds the classic fractional witness.  Facilities sit on the
-vertices of an odd cycle and clients on its edges, with the shortest-path metric of the
-incidence graph (metric by construction, as both papers require).  Restricting to
-``R_j = 1`` makes each client admissible only to its two endpoints, so the LP reduces to
-fractional vertex cover of an odd cycle: ``y_i = 1/2`` everywhere, costing ``k/2``, while
-any integral cover needs ``ceil(k/2)`` facilities.  That half-integral solution forces
-copies to be shared between clients and cut at different offsets, which is exactly the
-path the real datasets never reach.
+Fractional optima do occur on the real data, concentrated in the datasets with more
+candidate facilities (``adult-429-65``, ``uflp-49``, ``uflp-88``) and at cost scales
+large enough to make opening decisions genuinely contested.  They are a minority of
+configurations, though, and none of them is half-integral in a controlled way.
+
+:func:`odd_cycle_instance` supplies the classic fractional witness on demand.  Facilities
+sit on the vertices of an odd cycle and clients on its edges, with the shortest-path
+metric of the incidence graph (metric by construction, as both papers require).
+Restricting to ``R_j = 1`` makes each client admissible only to its two endpoints, so the
+LP reduces to fractional vertex cover of an odd cycle: ``y_i = 1/2`` everywhere, costing
+``k/2``, while any integral cover needs ``ceil(k/2)`` facilities.  That half-integral
+solution forces copies to be shared between clients and cut at different offsets, giving
+the rounding path a deterministic stress test rather than an incidental one.
 """
 
 from __future__ import annotations

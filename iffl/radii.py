@@ -57,6 +57,12 @@ def nearest_facility_multiple(
     for Approach A.  ``alpha`` controls how much slack each client gets: ``alpha = 1``
     with ``rank = 1`` pins every client to its single closest facility.
 
+    A client sitting *exactly* on a facility site gets ``R_j = alpha * 0 = 0``, which
+    means it must be served from that precise location.  That is a legitimate instance,
+    not an error, and the reported ``radius_n_zero`` count makes it visible: one client
+    of ``adult-429-65`` is such a case, and it is the sole reason Approach B reports an
+    infinite radius ratio on that dataset.
+
     ``rank`` exists because of the UFLP workbooks, where clients and facilities are the
     *same* point set.  There every client sits on a facility site, so its
     nearest-facility distance is exactly 0 and ``alpha * 0 = 0`` collapses the radius
@@ -74,6 +80,7 @@ def nearest_facility_multiple(
         "radius_rank": rank,
         "radius_clamped": n_clamped,
         "radius_degenerate": bool(np.all(R <= 1e-12)),
+        "radius_n_zero": int(np.count_nonzero(R <= 1e-12)),
         "radius_uniform": bool(np.ptp(R) <= 1e-12),
     }
 
@@ -113,6 +120,7 @@ def uniform(
         "radius_effective_quantile": effective_q,
         "radius_clamped": 0,
         "radius_degenerate": bool(value <= 1e-12),
+        "radius_n_zero": int(inst.n) if value <= 1e-12 else 0,
         "radius_uniform": True,
     }
 
@@ -141,6 +149,8 @@ def jkl_client_knn(inst: Instance, k: int) -> tuple[np.ndarray, dict]:
         "radius_param": k,
         "radius_rank": rank,
         "radius_clamped": n_clamped,
+        "radius_degenerate": bool(np.all(R <= 1e-12)),
+        "radius_n_zero": int(np.count_nonzero(R <= 1e-12)),
         "radius_uniform": bool(np.ptp(R) <= 1e-12),
     }
 
