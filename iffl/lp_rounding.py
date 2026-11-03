@@ -246,9 +246,8 @@ def build_copy_structure(
 def cluster_centers(cs: CopyStructure, n: int) -> tuple[list[int], np.ndarray]:
     """Step 4: greedy clustering in increasing order of ``d^max``.
 
-    Mirrors the structure of ``cluster`` in ``Fair-FL/fl-lp-pd-new.jl``, but scored by
-    ``d^max_j`` and keyed on close-set intersection rather than by the dual ``alpha_j``
-    and the full LP support.
+    This is the Chudak-Shmoys clustering step, scored by ``d^max_j`` and keyed on
+    close-set intersection.
 
     Returns the center list and ``sigma``, mapping each client to its center.
     """

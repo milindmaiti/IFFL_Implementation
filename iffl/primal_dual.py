@@ -23,7 +23,7 @@ Two implementation notes that matter:
 The (3,3) guarantee holds for *uniform* radii only.  The witness argument bounds
 ``d(j, i)`` by ``R_j + R_{j*} + R_{j*}`` where ``j*`` is a shared witness; with
 heterogeneous radii ``R_{j*}`` can be arbitrarily larger than ``R_j``, so nothing is
-bounded relative to ``R_j`` (Remark 2.3).  The code runs on nonuniform radii too and
+bounded relative to ``R_j``.  The code runs on nonuniform radii too and
 reports the realised ratio, but only asserts the bound when the radii are uniform.
 """
 

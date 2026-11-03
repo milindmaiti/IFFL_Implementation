@@ -1,8 +1,7 @@
 """Instance representation for Individually Fair Facility Location.
 
 Distance convention: ``d[j, i]`` is the distance from client ``j`` to facility ``i``
-(client row, facility column).  This mirrors ``distMatr[j][i]`` in the reference Julia
-code (``Fair-FL/testing.jl``) and is used consistently everywhere in this package.
+(client row, facility column), used consistently everywhere in this package.
 """
 
 from __future__ import annotations
@@ -16,8 +15,7 @@ from scipy.spatial.distance import cdist
 def l2_matrix(client_pts: np.ndarray, facility_pts: np.ndarray) -> np.ndarray:
     """Pairwise Euclidean distances, shape ``(n_clients, n_facilities)``.
 
-    Equivalent to the ``l2`` helper in ``Fair-FL/fl-lp-pd-new.jl`` applied to every
-    client/facility pair.  ``cdist`` is used rather than the usual
+    ``cdist`` is used rather than the usual
     ``|a|^2 + |b|^2 - 2 a.b`` expansion because that expansion cancels catastrophically
     when coordinates are large relative to their spread: on the UFLP workbooks, whose
     raw lat/lon values sit near 38 and 121, it returns a self-distance around 1e-6

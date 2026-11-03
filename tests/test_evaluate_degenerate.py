@@ -68,7 +68,7 @@ def test_primal_dual_runs_on_degenerate_radii_without_nan(name):
 
 
 def test_threshold_baseline_returns_nothing_on_a_fractional_lp():
-    """The heuristic_round pattern has no guarantee: it opens nothing when y is
+    """Threshold rounding has no guarantee: it opens nothing when y is
     half-integral, which is precisely the gap the paper's rounding fills."""
     from iffl.synthetic import odd_cycle_instance
 

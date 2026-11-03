@@ -127,7 +127,7 @@ def test_indirect_assignment_path_is_exercised():
 
 
 def test_nonuniform_radii_break_the_bound_as_remark_2_3_predicts():
-    """Remark 2.3: with heterogeneous radii the witness's R_{j*} can dwarf R_j, so no
+    """With heterogeneous radii the witness's R_{j*} can dwarf R_j, so no
     bound relative to R_j survives.  The algorithm still runs; it just violates 3R."""
     inst = radii.apply_scheme(
         load_dataset("synth-225-25"), "nearest_facility_multiple", 2.0

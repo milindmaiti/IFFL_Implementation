@@ -40,9 +40,9 @@ def assignment_costs(inst, assignment: np.ndarray) -> tuple[float, float]:
 def threshold_round(inst, lp, eps: float = 0.01) -> np.ndarray:
     """Baseline: open every facility with ``y_i > 1 - eps``.
 
-    This is the ``heuristic_round`` pattern from ``Fair-FL/fl-lp-pd-new.jl`` -- it has no
-    approximation guarantee and returns nothing at all when the LP is fractional, which
-    is exactly why the paper's rounding exists.  Included as a reference point.
+    The naive way to read a solution off the LP.  It has no approximation guarantee and
+    returns nothing at all when the LP is fractional, which is exactly why the paper's
+    rounding step exists.  Included as a reference point.
     """
     return np.flatnonzero(lp.y > 1.0 - eps)
 

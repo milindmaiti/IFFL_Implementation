@@ -1,6 +1,6 @@
 """Synthetic instances, including ones whose restricted LP is genuinely fractional.
 
-Most configurations of the eight Fair-FL datasets yield an *integral* LP optimum, which
+Most configurations of the eight benchmark datasets yield an *integral* LP optimum, which
 is common for geometric facility-location instances.  Where that happens Approach A
 degenerates: with ``y* in {0,1}`` each client's close set lies inside a single facility,
 so the rounding opens exactly the LP's facilities and returns cost ratio 1.000

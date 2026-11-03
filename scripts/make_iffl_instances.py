@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Materialize IFFL instances: radii and opening costs, plus a manifest.
 
-Turns each Fair-FL dataset into concrete IFFL instances by attaching a radius vector and
-an opening-cost vector, written as sidecar ``.npz`` files under ``instances/``.  The
-original files in ``Fair-FL/`` are only read, never modified.
+Turns each dataset into concrete IFFL instances by attaching a radius vector and an
+opening-cost vector, written as sidecar ``.npz`` files under ``instances/``.  The files
+under ``data/`` are only read, never modified.
 
 The manifest records the scheme, its parameters, the clamp count and the seed for every
 instance, so a sweep can be reproduced -- or inspected for the degeneracies that bite on

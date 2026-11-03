@@ -3,7 +3,7 @@
 Approach A (LP rounding) handles arbitrary nonuniform ``R_j``.  Approach B
 (primal-dual) proves its (3,3) bound only for *uniform* ``R``: its witness argument
 evaluates to ``R_j + R_{j*} + R_{j*}``, so a witness with a much larger radius destroys
-any bound stated relative to ``R_j`` (Remark 2.3).  Both regimes are provided so the
+any bound stated relative to ``R_j``.  Both regimes are provided so the
 two algorithms can be compared on the same instances.
 
 Every scheme is clamped to feasibility.  A client whose radius falls below its

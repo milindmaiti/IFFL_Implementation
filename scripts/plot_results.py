@@ -4,8 +4,8 @@
 Four panels, each also written as a CSV table view beside the image:
 
 1. Mean cost ratio against the LP bound, by algorithm.
-2. Approach B's radius ratio under uniform vs nonuniform radii -- the Remark 2.3
-   result, and the main reason Approach A exists.
+2. Approach B's radius ratio under uniform vs nonuniform radii -- why its bound needs
+   uniform radii, and the main reason Approach A exists.
 3. Approach A's cost ratio on the fractional-LP configs, against its 1.725 bound.
 4. Cost ratio against the opening-cost scale, for the two paper algorithms.
 
@@ -149,7 +149,7 @@ def fig_radius_uniform_vs_not(df, pal, out: Path):
     ax.legend(frameon=False, loc="lower right", labelcolor=pal["text"],
               bbox_to_anchor=(1.0, 0.02))
     _finish(ax, pal, "Approach B keeps its 3R promise only for uniform radii",
-            "Remark 2.3: with heterogeneous radii the witness's R can dwarf the client's")
+            "with heterogeneous radii the witness's R can dwarf the client's, so no bound survives")
     fig.tight_layout()
     fig.savefig(out.with_suffix(".png"), dpi=200)
     plt.close(fig)

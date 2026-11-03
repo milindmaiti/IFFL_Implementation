@@ -9,7 +9,7 @@ The two guarantees are checked differently, because the papers state them differ
 * Approach A's ``d(j,S) <= 3 R_j`` is deterministic, so it is asserted on *every* trial,
   while its ``1.725`` cost bound holds only in expectation and is therefore compared
   against the mean over trials.
-* Approach B's bound is proved for uniform radii only (Remark 2.3), so it is asserted
+* Approach B's bound is proved for uniform radii only, so it is asserted
   there and merely *measured* on nonuniform radii -- where it is expected to fail, and
   by how much is one of the more interesting things the sweep reports.
 
@@ -151,7 +151,7 @@ def summarize(df: pd.DataFrame) -> None:
             infinite = viol[~np.isfinite(viol["max_radius_ratio"])]
             worst = finite["max_radius_ratio"].max() if len(finite) else float("nan")
             print(f"    NONUNIFORM radii: exceeds 3 in {len(viol)}/{len(bn)} configs "
-                  f"(expected -- Remark 2.3); worst finite ratio = {worst:.4f}")
+                  f"(expected -- B's bound needs uniform radii); worst finite ratio = {worst:.4f}")
             if len(infinite):
                 print(f"    {len(infinite)} of those are infinite: a client sits exactly on a "
                       f"facility site, so R_j = 0 and any positive distance violates it")

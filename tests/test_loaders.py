@@ -1,4 +1,4 @@
-"""Loaders must reproduce the reference Julia pipeline's numbers exactly."""
+"""Loaders must reproduce each dataset's published conventions exactly."""
 
 from __future__ import annotations
 
@@ -47,8 +47,8 @@ def test_space_delimited_files_parse():
         assert np.issubdtype(inst.client_pts.dtype, np.floating)
 
 
-def test_l2_matches_julia_formula_on_known_row():
-    """Spot-check d[0,0] against the explicit loop in Fair-FL/fl-lp-pd-new.jl's l2."""
+def test_l2_matches_explicit_formula_on_known_row():
+    """Spot-check d[0,0] against a term-by-term Euclidean distance."""
     inst = load_dataset("adult-500-20")
     root = default_data_dir()
     clients = pd.read_csv(root / "adult-500-20.csv", sep=r"\s+", engine="python")
@@ -61,7 +61,7 @@ def test_l2_matches_julia_formula_on_known_row():
 
 
 def test_uflp_costs_are_fixed_cost_over_10000():
-    """process49 in the Julia code divides the 'fixed cost' column by 10000."""
+    """Workbook opening costs are the 'fixed cost' column divided by 10000."""
     inst = load_dataset("uflp-49")
     # Sacramento is the first row with fixed cost 115800.
     assert inst.f[0] == pytest.approx(115800 / 10000.0)
@@ -81,7 +81,7 @@ def test_synth_costs_present_and_adult_bank_absent():
 
 
 def test_synth_keeps_out_labelled_clients():
-    """The 'out' rows are clients with a group tag, as processSynth treats them."""
+    """The 'out' rows are clients carrying a group tag, not rows to be excluded."""
     inst = load_dataset("synth-225-25")
     labels, counts = np.unique(inst.groups["c1"], return_counts=True)
     assert dict(zip(labels.tolist(), counts.tolist())) == {"in": 225, "out": 25}

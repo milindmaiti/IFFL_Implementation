@@ -1,4 +1,4 @@
-"""Dataset loaders for the eight Fair-FL datasets.
+"""Dataset loaders for the eight benchmark datasets under ``data/``.
 
 The six CSV pairs and two UFLP workbooks differ in ways that matter:
 
@@ -11,8 +11,9 @@ The six CSV pairs and two UFLP workbooks differ in ways that matter:
 * In the UFLP workbooks clients and facilities are the *same* point set (n == m) and
   the distance matrix is symmetric.
 
-Formulas mirror the reference Julia implementation so numbers stay comparable:
-plain L2 over the ``d*`` columns, and ``fixed cost / 10000`` for workbook costs.
+Distances are plain L2 over the ``d*`` columns; workbook opening costs are the
+``fixed cost`` column divided by 10000.  Both follow the conventions the datasets were
+originally published with, so results stay comparable with prior work on them.
 """
 
 from __future__ import annotations
@@ -48,8 +49,8 @@ _GROUP_RE = re.compile(r"^c\d+$")
 
 
 def default_data_dir() -> Path:
-    """The sibling ``Fair-FL`` checkout, which is only ever read, never written."""
-    return (Path(__file__).resolve().parent.parent.parent / "Fair-FL").resolve()
+    """The bundled ``data/`` directory, which is only ever read, never written."""
+    return (Path(__file__).resolve().parent.parent / "data").resolve()
 
 
 def _read_table(path: Path) -> pd.DataFrame:
@@ -75,8 +76,7 @@ def load_csv_dataset(name: str, data_dir: Path | str | None = None) -> Instance:
     """Load one ``<name>.csv`` / ``<name>-fac.csv`` pair.
 
     Every client row is kept, including the ``out``-labelled synthetic points: those
-    are real clients whose ``c1`` value is just a group tag, which is how
-    ``processSynth`` in the reference Julia code treats them.
+    are real clients whose ``c1`` value is a group tag, not an exclusion marker.
     """
     root = Path(data_dir) if data_dir is not None else default_data_dir()
     clients = _read_table(root / f"{name}.csv")
@@ -122,7 +122,7 @@ def load_xlsx_dataset(name: str, data_dir: Path | str | None = None) -> Instance
     Both workbooks put their data rows from row 3 onward, with columns
     ``index, demand, emerg cost, failable, fixed cost, lat, lon, ...``.  Clients and
     facilities are the same point set, distances are Euclidean on raw (lat, lon), and
-    opening costs are ``fixed cost / 10000`` -- all matching ``process49``/``process88``.
+    opening costs are ``fixed cost / 10000``.
     """
     from openpyxl import load_workbook
 

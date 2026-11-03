@@ -134,7 +134,8 @@ def test_rounding_is_actually_randomized_on_fractional_instances():
 
 
 def test_integral_lp_rounds_to_the_lp_solution():
-    """Sanity check of the opposite regime: every Fair-FL dataset has an integral LP,
+    """Sanity check of the opposite regime: most benchmark configurations have an
+    integral LP,
     where the rounding should reproduce the LP exactly."""
     inst = _real_instance()
     lp = solve_restricted_lp(inst)
