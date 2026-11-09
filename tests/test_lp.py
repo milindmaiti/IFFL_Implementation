@@ -32,7 +32,7 @@ def test_lp_only_uses_admissible_edges():
 
 
 def test_lp_constraints_satisfied():
-    inst = radii.apply_scheme(load_dataset("synth-225-25"), "uniform", 0.5)
+    inst = radii.apply_scheme(load_dataset("synth-225-25"), "uniform", 1.5)
     lp = solve_restricted_lp(inst)
     served = np.zeros(inst.n)
     np.add.at(served, lp.edge_client, lp.x)
@@ -42,7 +42,7 @@ def test_lp_constraints_satisfied():
 
 
 def test_objective_decomposes():
-    inst = radii.apply_scheme(load_dataset("bank-500-20"), "uniform", 0.5)
+    inst = radii.apply_scheme(load_dataset("bank-500-20"), "uniform", 1.5)
     from iffl import costs
 
     inst = costs.ensure_costs(inst, scale=1.0)

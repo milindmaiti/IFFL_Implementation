@@ -12,9 +12,9 @@ SCHEMES = [
     ("nearest_facility_multiple", 1.0),
     ("nearest_facility_multiple", 2.0),
     ("nearest_facility_multiple", 4.0),
-    ("uniform", 0.25),
-    ("uniform", 0.5),
-    ("uniform", 0.9),
+    ("uniform", 1.0),
+    ("uniform", 2.0),
+    ("uniform", 3.0),
     ("jkl_client_knn", 5),
     ("jkl_client_knn", 20),
 ]
@@ -32,7 +32,7 @@ def test_every_scheme_is_feasible(name, scheme, param):
 
 
 @pytest.mark.parametrize("name", ALL_DATASETS)
-@pytest.mark.parametrize("q", [0.1, 0.5, 0.9])
+@pytest.mark.parametrize("q", [1.0, 2.0, 4.0])
 def test_uniform_scheme_stays_uniform(name, q):
     """Approach B's proof needs one shared R, so feasibility must not be bought by
     clamping individual clients upward."""
@@ -50,13 +50,32 @@ def test_nearest_multiple_scales_linearly():
     assert np.allclose(r1, inst.nearest_facility_dist)
 
 
-def test_uniform_reports_lifting_when_percentile_is_infeasible():
-    """A low percentile is below some clients' floor, so the shared value is lifted."""
-    inst = load_dataset("synth-225-25")
-    R, meta = radii.uniform(inst, 0.01)
-    assert meta["radius_lifted_for_feasibility"] is True
-    assert R[0] == pytest.approx(inst.nearest_facility_dist.max())
-    assert meta["radius_effective_quantile"] == pytest.approx(1.0)
+def test_uniform_multiplier_actually_varies_the_radius():
+    """The previous quantile parameterisation was degenerate: a long right tail in the
+    nearest-facility distribution meant the feasibility floor beat every quantile, so
+    all four swept values produced an identical radius on six of eight datasets, making
+    those configurations duplicates."""
+    inst = load_dataset("synth-500-50")
+    vals = [float(radii.uniform(inst, m)[0][0]) for m in (1.0, 1.5, 2.0, 3.0)]
+    assert len(set(np.round(vals, 9))) == 4
+    assert vals == sorted(vals)
+
+
+def test_uniform_multiplier_one_is_the_tightest_feasible_radius():
+    """mult = 1 is exactly the smallest uniform radius leaving every client an edge."""
+    for name in ("synth-500-50", "adult-500-20", "bank-500-20"):
+        inst = load_dataset(name)
+        R, meta = radii.uniform(inst, 1.0)
+        assert R[0] == pytest.approx(inst.nearest_facility_dist.max())
+        assert R[0] == pytest.approx(meta["radius_min_feasible"])
+        # Anything smaller would strand the client farthest from any facility.
+        stranded = inst.nearest_facility_dist > R[0] * 0.999
+        assert stranded.any()
+
+
+def test_uniform_rejects_an_infeasible_multiplier():
+    with pytest.raises(ValueError, match="at least 1"):
+        radii.uniform(load_dataset("synth-225-25"), 0.5)
 
 
 def test_jkl_reports_clamping():

@@ -220,8 +220,10 @@ def build_copy_structure(
 
     # d^max_j <= R_j (equation 4): the filtered close set stays inside the radius,
     # which is what makes the 3R_j guarantee deterministic.
+    # Relative to the radius scale, so large-magnitude instances are not flagged for
+    # ordinary floating-point noise.
     radius_slack = float(np.max(d_max - inst.R))
-    if radius_slack > 1e-6:
+    if radius_slack > 1e-9 * float(max(1.0, inst.R.max())):
         raise ValueError(
             f"{inst.name}: d^max_j exceeds R_j by {radius_slack:.3g}"
         )

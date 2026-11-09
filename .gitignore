@@ -6,3 +6,5 @@ results/
 instances/
 *.npz
 .DS_Store
+.cache/
+paper/

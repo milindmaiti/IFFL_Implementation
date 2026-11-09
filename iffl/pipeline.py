@@ -12,18 +12,60 @@ from iffl import radii as radii_mod
 from iffl.configs import Config, radius_rank_for
 from iffl.evaluate import greedy_nearest_feasible, threshold_round
 from iffl.greedy import greedy_iffl
-from iffl.instance import Instance
+from iffl.instance import Instance, l2_matrix
 from iffl.loaders import load_dataset
 from iffl.lp import solve_restricted_lp
 from iffl.lp_rounding import evaluate_open_set, lp_rounding_iffl
 from iffl.primal_dual import primal_dual_iffl
 from iffl.synthetic import odd_cycle_instance
+from iffl.upstream import load_adult_pool, load_bank_pool, sample_instance
+
+
+_POOL_CACHE: dict[str, object] = {}
+
+
+def upstream_instance(spec: str, cache_dir: Path | str = ".cache") -> Instance:
+    """Build an instance sampled from a full upstream dataset.
+
+    ``spec`` is ``"upstream:<pool>:<n>:<m>[:<seed>]"``, e.g. ``upstream:adult:2000:100``.
+    Pools are ``adult`` (45,222 rows) and ``bank`` (45,211 rows from ``bank-full.csv``).
+    The preprocessing matches the bundled instances exactly, so sizes are comparable;
+    see :mod:`iffl.upstream`.
+    """
+    parts = spec.split(":")
+    if len(parts) not in (4, 5) or parts[0] != "upstream":
+        raise ValueError(f"bad upstream spec {spec!r}")
+    pool_name, n, m = parts[1], int(parts[2]), int(parts[3])
+    seed = int(parts[4]) if len(parts) == 5 else 0
+
+    if pool_name not in _POOL_CACHE:
+        loader = {"adult": load_adult_pool, "bank": load_bank_pool}[pool_name]
+        _POOL_CACHE[pool_name] = loader(Path(cache_dir))
+    pool = _POOL_CACHE[pool_name]
+
+    clients, facs = sample_instance(pool, n, m, seed=seed)
+    dims = [c for c in clients.columns if c.startswith("d")]
+    C = clients[dims].to_numpy(dtype=float)
+    F = facs[dims].to_numpy(dtype=float)
+    groups = {c: clients[c].to_numpy() for c in clients.columns if c.startswith("c")}
+    return Instance(
+        name=spec,
+        client_pts=C,
+        facility_pts=F,
+        f=np.zeros(m),
+        d=l2_matrix(C, F),
+        groups=groups,
+        meta={"source": "upstream", "has_native_costs": False,
+              "pool": pool.name, "pool_size": len(pool), "sample_seed": seed},
+    )
 
 
 def base_instance(dataset: str, data_dir: Path | str | None = None) -> Instance:
-    """Load a dataset by name, including the synthetic odd-cycle instances."""
+    """Load a dataset by name, including synthetic and upstream-sampled instances."""
     if dataset.startswith("oddcycle-"):
         return odd_cycle_instance(int(dataset.split("-")[1]), facility_cost=10.0)
+    if dataset.startswith("upstream:"):
+        return upstream_instance(dataset)
     return load_dataset(dataset, data_dir)
 
 

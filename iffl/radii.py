@@ -85,39 +85,38 @@ def nearest_facility_multiple(
     }
 
 
-def uniform(
-    inst: Instance, q: float, alpha: float = 1.0, rank: int = 1
-) -> tuple[np.ndarray, dict]:
+def uniform(inst: Instance, mult: float, rank: int = 1) -> tuple[np.ndarray, dict]:
     """A single radius shared by every client -- what Approach B requires.
 
-    ``R = max(alpha * quantile(basis, q), max_j nearest_j)`` where ``basis`` is the
-    distance to each client's ``rank``-th nearest facility.
+    ``R = mult * max_j basis_j``, where ``basis`` is each client's distance to its
+    ``rank``-th nearest facility.  Since ``max_j basis_j`` is the smallest uniform radius
+    that leaves every client with an admissible edge, ``mult >= 1`` is feasible by
+    construction and ``mult`` is exactly "how much slack beyond the tightest feasible
+    uniform radius".
 
-    The outer ``max`` is what keeps the result both uniform *and* feasible.  Taking a
-    bare percentile and then clamping per client would leave the tail clients with
-    larger radii than everyone else, quietly violating the uniformity the (3,3) proof
-    depends on; lifting the shared value instead preserves it.  The effective quantile
-    actually realised is reported back.
-
-    ``rank`` plays the same role as in :func:`nearest_facility_multiple`: with clients
-    sitting on facility sites the rank-1 basis is all zeros, so the shared radius would
-    collapse to 0 and make the instance trivial.
+    This replaced a quantile parameterisation, ``R = max(quantile(basis, q), max_j nn_j)``,
+    which looked reasonable but was degenerate on most of these datasets: the
+    nearest-facility distribution has a long right tail -- one client far from
+    everything -- so ``max_j nn_j`` exceeded even the 90th percentile and the quantile
+    never won.  On six of the eight bundled datasets every ``q`` produced an identical
+    radius, making the sweep's uniform configurations 4-way duplicates.  Clamping per
+    client instead would restore the variation but break the uniformity the (3,3) proof
+    depends on, so the scale is applied to the shared value.
     """
+    if mult < 1.0:
+        raise ValueError("mult must be at least 1 for the radius to stay feasible")
     floor = inst.nearest_facility_dist
     basis = facility_distance_basis(inst, rank)
-    target = alpha * float(np.quantile(basis, q))
-    value = max(target, float(floor.max()))
+    value = float(mult * basis.max())
+    value = max(value, float(floor.max()))      # rank > 1 can dip below the floor
     R = np.full(inst.n, value, dtype=float)
-    effective_q = float(np.mean(basis <= value))
     return R, {
         "radius_scheme": "uniform",
-        "radius_param": q,
-        "radius_alpha": alpha,
+        "radius_param": mult,
         "radius_rank": rank,
         "radius_value": value,
-        "radius_requested_value": target,
-        "radius_lifted_for_feasibility": bool(value > target + 1e-12),
-        "radius_effective_quantile": effective_q,
+        "radius_min_feasible": float(max(basis.max(), floor.max())),
+        "radius_fraction_inside": float(np.mean(basis <= value)),
         "radius_clamped": 0,
         "radius_degenerate": bool(value <= 1e-12),
         "radius_n_zero": int(inst.n) if value <= 1e-12 else 0,
@@ -162,12 +161,7 @@ def apply_scheme(inst: Instance, scheme: str, param: float, **kwargs) -> Instanc
             inst, float(param), rank=int(kwargs.get("rank", 1))
         )
     elif scheme == "uniform":
-        R, meta = uniform(
-            inst,
-            float(param),
-            alpha=float(kwargs.get("alpha", 1.0)),
-            rank=int(kwargs.get("rank", 1)),
-        )
+        R, meta = uniform(inst, float(param), rank=int(kwargs.get("rank", 1)))
     elif scheme == "jkl_client_knn":
         R, meta = jkl_client_knn(inst, int(param))
     else:

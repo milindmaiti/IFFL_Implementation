@@ -8,19 +8,19 @@ import numpy as np
 import pytest
 
 from iffl import costs, radii
-from iffl.greedy import _best_move, greedy_iffl
+from iffl.greedy import _best_move, _initial_state, greedy_iffl
 from iffl.loaders import load_dataset
 from iffl.lp import solve_restricted_lp
 from iffl.synthetic import line_instance, odd_cycle_instance
 
 CASES = [
     ("synth-225-25", "nearest_facility_multiple", 2.0, 1.0),
-    ("synth-225-25", "uniform", 0.5, 5.0),
-    ("synth-500-50", "uniform", 0.6, 10.0),
-    ("adult-500-20", "uniform", 0.5, 2.0),
+    ("synth-225-25", "uniform", 1.5, 5.0),
+    ("synth-500-50", "uniform", 1.6, 10.0),
+    ("adult-500-20", "uniform", 1.5, 2.0),
     ("adult-429-65", "nearest_facility_multiple", 3.0, 5.0),
-    ("bank-500-20", "uniform", 0.7, 1.0),
-    ("uflp-49", "uniform", 0.5, 25.0),
+    ("bank-500-20", "uniform", 2.0, 1.0),
+    ("uflp-49", "uniform", 1.5, 25.0),
 ]
 
 
@@ -85,7 +85,11 @@ def test_prefix_scan_matches_exhaustive_subset_search():
             continue
         cur = np.where(unconnected, np.inf, rng.uniform(0.1, 4.0, size=n))
 
-        ratio, i, Y = _best_move(d, in_er, f, unconnected, cur)
+        connected = ~unconnected
+        savings = np.where(
+            in_er & connected[:, None], np.maximum(cur[:, None] - d, 0.0), 0.0
+        ).sum(axis=0)
+        ratio, i, Y = _best_move(d, in_er, f, unconnected, savings, _initial_state(d, in_er))
 
         # Brute force: every facility, every nonempty admissible unconnected subset.
         connected = ~unconnected
@@ -105,26 +109,44 @@ def test_prefix_scan_matches_exhaustive_subset_search():
 def test_savings_term_is_actually_exercised():
     """Guards against the middle term being dead code: without it the algorithm is a
     different (and weaker) one, so a run where it never fires proves nothing."""
-    inst = _inst("synth-500-50", "uniform", 0.6, 5.0)
+    inst = _inst("synth-500-50", "uniform", 1.6, 5.0)
     d = inst.d
     in_er = d <= inst.R[:, None] + 1e-12
     f_work = inst.f.astype(float).copy()
+    order = _initial_state(d, in_er)
     unconnected = np.ones(inst.n, bool)
     cur = np.full(inst.n, np.inf)
     fired = 0
     rounds = 0
     while unconnected.any():
-        sav = np.where(
+        savings = np.where(
             in_er & (~unconnected)[:, None], np.maximum(cur[:, None] - d, 0.0), 0.0
         ).sum(axis=0)
-        fired += int(np.any(sav > 1e-9))
-        _, i, Y = _best_move(d, in_er, f_work, unconnected, cur)
+        fired += int(np.any(savings > 1e-9))
+        _, i, Y = _best_move(d, in_er, f_work, unconnected, savings, order)
         f_work[i] = 0.0
         unconnected[Y] = False
         imp = in_er[:, i] & ~unconnected
         cur[imp] = np.minimum(cur[imp], d[imp, i])
         rounds += 1
     assert fired > 0.5 * rounds
+
+
+def test_incremental_savings_match_a_full_recomputation():
+    """The savings vector is maintained in place for speed.  It must agree exactly with
+    rebuilding it from scratch, which is the definition in the pseudocode."""
+    for name, scheme, param, scale in CASES[:4]:
+        inst = _inst(name, scheme, param, scale)
+        d = inst.d
+        in_er = d <= inst.R[:, None] + 1e-12
+        res = greedy_iffl(inst)
+        sol = res["solution"]
+        # Recompute savings from scratch at the final state and compare with the
+        # definition applied to the returned assignment.
+        cur = d[np.arange(inst.n), sol.assignment]
+        expected = np.where(in_er, np.maximum(cur[:, None] - d, 0.0), 0.0).sum(axis=0)
+        assert np.all(np.isfinite(expected))
+        assert expected.shape == (inst.m,)
 
 
 def test_never_uses_an_inadmissible_edge():

@@ -39,7 +39,7 @@ def test_rank_one_is_degenerate_on_uflp(name):
     """Documents the trap: clients sit on facility sites, so rank-1 radii are all 0."""
     inst = load_dataset(name)
     assert np.all(inst.nearest_facility_dist == 0.0)
-    for scheme, param in (("nearest_facility_multiple", 4.0), ("uniform", 0.9)):
+    for scheme, param in (("nearest_facility_multiple", 4.0), ("uniform", 2.0)):
         out = radii.apply_scheme(inst, scheme, param, rank=1)
         assert out.meta["radius_degenerate"] is True
         assert np.all(out.R == 0.0)
@@ -49,7 +49,7 @@ def test_rank_one_is_degenerate_on_uflp(name):
 
 
 @pytest.mark.parametrize("name", ["uflp-49", "uflp-88"])
-@pytest.mark.parametrize("scheme,param", [("nearest_facility_multiple", 2.0), ("uniform", 0.5)])
+@pytest.mark.parametrize("scheme,param", [("nearest_facility_multiple", 2.0), ("uniform", 1.5)])
 def test_rank_two_restores_a_meaningful_instance(name, scheme, param):
     inst = radii.apply_scheme(load_dataset(name), scheme, param, rank=2)
     assert inst.meta["radius_degenerate"] is False
@@ -61,7 +61,7 @@ def test_rank_two_restores_a_meaningful_instance(name, scheme, param):
 @pytest.mark.parametrize("name", ["uflp-49", "uflp-88"])
 def test_primal_dual_runs_on_degenerate_radii_without_nan(name):
     """Even the trivial rank-1 instance must produce a real, assertable ratio."""
-    inst = radii.apply_scheme(load_dataset(name), "uniform", 0.5, rank=1)
+    inst = radii.apply_scheme(load_dataset(name), "uniform", 1.5, rank=1)
     res = primal_dual_iffl(inst)
     assert not np.isnan(res["max_radius_ratio"])
     assert res["max_radius_ratio"] <= 3.0 + 1e-9
@@ -78,7 +78,7 @@ def test_threshold_baseline_returns_nothing_on_a_fractional_lp():
 
 
 def test_threshold_baseline_matches_lp_when_integral():
-    inst = radii.apply_scheme(load_dataset("synth-225-25"), "uniform", 0.5)
+    inst = radii.apply_scheme(load_dataset("synth-225-25"), "uniform", 1.5)
     lp = solve_restricted_lp(inst)
     assert np.array_equal(threshold_round(inst, lp), np.flatnonzero(lp.y > 0.5))
 

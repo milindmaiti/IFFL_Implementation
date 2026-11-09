@@ -12,11 +12,11 @@ from iffl.primal_dual import grow_duals, primal_dual_iffl, prune_and_assign
 from iffl.synthetic import odd_cycle_instance
 
 UNIFORM_CASES = [
-    ("synth-225-25", 0.3),
-    ("synth-500-50", 0.5),
-    ("adult-500-20", 0.5),
-    ("bank-500-20", 0.7),
-    ("uflp-49", 0.5),
+    ("synth-225-25", 1.2),
+    ("synth-500-50", 1.5),
+    ("adult-500-20", 1.5),
+    ("bank-500-20", 2.0),
+    ("uflp-49", 1.5),
 ]
 
 
@@ -139,7 +139,7 @@ def test_nonuniform_radii_break_the_bound_as_remark_2_3_predicts():
 
 
 def test_zero_cost_facilities_are_tight_immediately():
-    inst = _uniform_instance("synth-225-25", 0.5).with_costs(np.zeros(10))
+    inst = _uniform_instance("synth-225-25", 1.5).with_costs(np.zeros(10))
     dg = grow_duals(inst)
     assert np.all(dg.tight_time == 0.0)
 

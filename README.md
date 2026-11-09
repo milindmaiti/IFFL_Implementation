@@ -146,6 +146,35 @@ Two structural facts drive most of the behaviour below:
   widest `R_max/R_med` spread in the corpus — and they produce B's worst nonuniform
   violations.
 
+### Sampling larger instances
+
+The bundled files are small samples (429–550 clients) of surveys with ~45,000 rows.
+[`iffl/upstream.py`](iffl/upstream.py) rebuilds those populations and draws arbitrarily
+larger instances. The preprocessing was recovered by matching each bundled file's `id`
+column against the upstream data, and reproduces the bundled coordinates to within
+`1e-12` — so a freshly sampled 5,000-client instance is *comparable* with the bundled
+one, not merely similar.
+
+| pool | rows | preprocessing |
+|---|---|---|
+| `adult` | 45,222 | `adult.data` + `adult.test`, rows with missing values dropped; `age, fnlwgt, education-num, capital-gain, capital-loss, hours-per-week` z-scored with the **population** std |
+| `bank` | 45,211 | `bank-full.csv`; `age, balance, duration`, same scaling |
+
+The bundled `bank-500-20` comes from `bank.csv` (4,521 rows), not `bank-full.csv`; the
+sampler uses the larger pool by default, which changes the normalisation base and is
+recorded in each instance's provenance. Facilities in the bundled files are not pool
+rows but synthetic points closest in geometry to k-means centroids of the population, so
+`kmeans_pool` is the default generator — a reconstruction, not a claim to reproduce the
+original generator exactly.
+
+```bash
+python scripts/run_scale_study.py --pools adult bank --out results/scale.csv
+```
+
+Instances are addressed as `upstream:<pool>:<n>:<m>[:<seed>]`, e.g.
+`upstream:adult:5000:1000`, and work anywhere a dataset name does. The first call
+downloads and caches the archives under `.cache/`.
+
 ### Radius schemes
 
 Radii are not in the data; they are generated, and every scheme is clamped to
@@ -154,9 +183,12 @@ admissible edge and makes the LP infeasible).
 
 * `nearest_facility_multiple(α, rank)` — `R_j = α · d(j, rank-th nearest facility)`.
   Nonuniform, feasible by construction for `α ≥ 1`.
-* `uniform(q, rank)` — one shared radius at a quantile of that basis, lifted if needed
-  so it is both uniform *and* feasible. Clamping individual clients instead would
-  silently break the uniformity Approach B's proof depends on.
+* `uniform(mult, rank)` — one shared radius, `mult × max_j basis_j`. Since
+  `max_j basis_j` is the tightest uniform radius leaving every client an admissible
+  edge, `mult ≥ 1` is feasible by construction and the parameter means "slack beyond
+  the tightest feasible uniform radius". Clamping individual clients instead would
+  restore variation but break the uniformity Approach B's proof depends on, so the
+  scale is applied to the shared value.
 * `jkl_client_knn(k)` — Jung–Kannan–Lutz: distance to the `⌈n/k⌉`-th nearest *client*.
 
 ---
@@ -188,6 +220,44 @@ From `results/results.csv` — 657 configurations (dataset × radius scheme × c
 Keep that last point in proportion: these are *empirical* ratios on eight geometric
 datasets, not worst cases. A and B carry proved worst-case guarantees that C, in the
 restricted setting, does not.
+
+### At larger scale
+
+`results/scale.csv` resamples both pools across instance sizes up to 5,000 clients and
+1,000 facilities (540 rows). Two things come out of it.
+
+**Fractional LPs appear exactly where `m/n` predicts**, on real data:
+
+| `m/n` | adult | bank |
+|---|---|---|
+| 0.01 | 0% | 0% |
+| 0.04 | 0% | 0% |
+| 0.05 | 0% | 0% |
+| 0.20 | 22% | 17% |
+| 0.50 | 33% | 17% |
+
+Bank fractures less readily than Adult — its feature space is 3-D against Adult's 6-D,
+so facilities are easier to place well and the LP has less room to hedge.
+
+**The algorithms converge at scale.** On the fractional-LP configurations, which are the
+only ones where the three differ at all:
+
+| algorithm | bundled, all | bundled, real data only | upstream (n = 500–5000) | upstream max |
+|---|---|---|---|---|
+| A: LP rounding | 1.181 | 1.033 | **1.012** | 1.024 |
+| B: primal-dual | 0.992 | 1.014 | 1.042 | 1.087 |
+| C: greedy | 1.044 | 1.014 | **1.009** | 1.018 |
+
+A's apparent weakness on the bundled data was an artifact of small instances: 21 of
+those 60 fractional configurations are 5–15 node odd cycles, where its rounding pays its
+worst price. Strip those out and the spread already narrows; resample at realistic size
+and A and C are within 0.3% of each other. **The honest summary is that on fractional
+instances at scale all three sit within ~4% of the LP bound, and Approach C's real
+advantage is its fairness — strictly within `R_j` — rather than its cost.**
+
+Every guarantee continues to hold at this scale: 0 violations in 54 uniform-radius
+configurations per algorithm. Approach B still breaks on nonuniform radii, in 20 of 54,
+worst ratio 28.8.
 
 ### Reading the cost ratios
 

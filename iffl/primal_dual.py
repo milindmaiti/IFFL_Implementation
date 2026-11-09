@@ -183,17 +183,21 @@ def grow_duals(inst: Instance, tol: float = TOL) -> DualGrowth:
     beta[e_j, e_i] = width
 
     # Dual feasibility, unconditional: no facility is overpaid and no edge constraint
-    # alpha_j - beta_ij <= d(i,j) is violated.
+    # alpha_j - beta_ij <= d(i,j) is violated.  The tolerances are *relative*: opening
+    # costs here can run to 1e7 (the hardness reduction uses M = q^2), where an absolute
+    # 1e-6 is below what double precision can deliver after summing thousands of terms.
+    scale_f = float(max(1.0, f.max())) if m else 1.0
     overpay = float(np.max(beta.sum(axis=0) - f)) if m else 0.0
-    if overpay > 1e-6:
+    if overpay > 1e-9 * scale_f:
         i = int(np.argmax(beta.sum(axis=0) - f))
         raise AssertionError(
             f"{inst.name}: facility {i} overpaid -- sum beta = "
             f"{beta[:, i].sum():.9g} > f_i = {f[i]:.9g}"
         )
     slack = alpha[e_j] - beta[e_j, e_i] - e_d
+    scale_d = float(max(1.0, e_d.max())) if e_d.size else 1.0
     edge_violation = float(slack.max()) if slack.size else 0.0
-    if edge_violation > 1e-6:
+    if edge_violation > 1e-9 * max(scale_d, scale_f):
         raise AssertionError(
             f"{inst.name}: dual edge constraint violated by {edge_violation:.3g}"
         )
