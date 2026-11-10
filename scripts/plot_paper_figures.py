@@ -216,7 +216,7 @@ def main(argv=None) -> int:
 
     # Figures 1 and 2 need the full radius sweep on the largest UCI samples available.
     # results_upstream.csv carries that grid on instances resampled from the full pools
-    # (n = 2000, m = 100 and 400); results.csv is the fallback, but its UCI instances are
+    # (n = 1000, m = 200 and 400); results.csv is the fallback, but its UCI instances are
     # the small bundled ones at n <= 500.
     frames = []
     for f in ("results/results_upstream.csv", "results/results.csv"):
