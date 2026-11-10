@@ -169,42 +169,68 @@ def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
 
 
 def fig_cost_absolute(main, pal, out: Path, fmt: str):
-    """Unnormalised cost against radius tightness, one panel per instance.
+    """Unnormalised cost against radius tightness, one panel per instance and scheme.
 
     The ratio figure divides out the LP bound and so hides how much harder the problem
     itself becomes as radii tighten.  This plots the costs themselves, with the LP
     optimum as a fourth line: the gap between that line and the algorithms is their
     error, while its own slope is the problem hardening.  Raw costs are not comparable
-    across instances of different size, hence one panel each rather than an average.
+    across instances of different size, hence one column each rather than an average;
+    within a column the two schemes price the same instance, so the rows share a y-scale
+    and can be read against each other.
     """
     d = uci(main)
-    d = d[d.radius_scheme == "nearest_facility_multiple"]
+    d = d[d.radius_scheme.isin([s for s, _ in SCHEMES])]
     specs = sorted(d.dataset.unique())
 
-    fig, axes = plt.subplots(1, len(specs), figsize=(5.6, 2.5), sharex=True)
-    axes = np.atleast_1d(axes)
-    for ax, spec in zip(axes, specs):
-        g = d[d.dataset == spec]
-        piv = g.pivot_table(index="radius_param", columns="algo", values="cost", aggfunc="mean")
-        lp = g.groupby("radius_param")["lp_obj"].mean()
-        ax.plot(lp.index, lp.values, lw=1.0, ls="-", color=pal["rule"], zorder=2,
+    fig, axes = plt.subplots(len(SCHEMES), len(specs), figsize=(5.8, 4.1), sharex=True,
+                             squeeze=False)
+    panels = {}
+    for r, (scheme, sname) in enumerate(SCHEMES):
+        for c, spec in enumerate(specs):
+            g = d[(d.radius_scheme == scheme) & (d.dataset == spec)]
+            piv = g.pivot_table(index="radius_param", columns="algo", values="cost",
+                                aggfunc="mean")
+            t = g.groupby("radius_param").agg(eff=("radius_eff_alpha", "mean"),
+                                              lp=("lp_obj", "mean")).join(piv)
+            panels[(r, c)] = t.sort_values("eff")
+
+    for (r, c), t in panels.items():
+        ax = axes[r][c]
+        ax.plot(t.eff, t.lp, lw=1.0, ls="-", color=pal["rule"], zorder=2,
                 label="LP bound")
         for k, a in enumerate(ALGOS):
-            _series(ax, piv.index, piv[a], k, a, pal)
-        pool, n, m = spec.split(":")[1:4]
-        ax.set_title(f"{pool}, $m={m}$", color=pal["text"], fontsize=8.5, loc="left", pad=3)
-        ax.set_xlabel(r"radius multiplier $\alpha$")
+            _series(ax, t.eff, t[a], k, a, pal)
+        ax.set_xlim(0.8, 4.6)
         ax.set_xticks([1, 2, 3, 4])
         _grid(ax)
-    axes[0].set_ylabel("cost")
+
+    # Same instance down a column, so a shared y-scale makes the schemes comparable.
+    for c in range(len(specs)):
+        lo = min(panels[(r, c)].drop(columns="eff").min().min() for r in range(len(SCHEMES)))
+        hi = max(panels[(r, c)].drop(columns="eff").max().max() for r in range(len(SCHEMES)))
+        pad = 0.06 * (hi - lo)
+        for r in range(len(SCHEMES)):
+            axes[r][c].set_ylim(lo - pad, hi + pad)
+            if r:
+                continue
+            pool, _, m = specs[c].split(":")[1:4]
+            axes[r][c].set_title(f"{pool}, $m={m}$", color=pal["text"], fontsize=8.5,
+                                 loc="left", pad=3)
+
+    for r, (_, sname) in enumerate(SCHEMES):
+        axes[r][0].set_ylabel(f"{sname}\ncost")
+    # One shared x-label: four per-column copies collide at this width.
+    fig.supxlabel(r"effective multiplier $R_j / d(j,F)$", fontsize=9, y=0.02)
     # Curves fall steeply from the left, so the legend goes under them on the right.
-    axes[-1].legend(loc="upper right", handlelength=2.0, borderaxespad=0.3,
-                    labelspacing=0.2, fontsize=7)
-    fig.subplots_adjust(wspace=0.28)
+    axes[0][-1].legend(loc="upper right", handlelength=2.0, borderaxespad=0.3,
+                       labelspacing=0.2, fontsize=7)
+    fig.subplots_adjust(wspace=0.34, hspace=0.22)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
-    d.pivot_table(index=["dataset", "radius_param"], columns="algo",
-                  values="cost", aggfunc="mean").to_csv(out.with_suffix(".csv"))
+    pd.concat({f"{sname}|{specs[c]}": panels[(r, c)]
+               for r, (_, sname) in enumerate(SCHEMES) for c in range(len(specs))},
+              names=["scheme_instance"]).to_csv(out.with_suffix(".csv"))
 
 
 def main(argv=None) -> int:
