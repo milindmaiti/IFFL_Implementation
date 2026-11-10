@@ -135,7 +135,6 @@ def _row(cfg: Config, inst: Instance, lp, algo: str, **extra) -> dict:
 #: Retained for callers that still read it; distributions are now stored as raw
 #: per-client ratios, since a quantile grid cannot resolve the extreme tail and the
 #: outliers are the interesting part.
-DIST_LEVELS = np.linspace(0.0, 1.0, 1001)
 
 
 def run_config(
@@ -152,7 +151,7 @@ def run_config(
     Args:
         strict: propagate guarantee assertions.  With ``strict=False`` a failure is
             recorded in the row instead, so one bad config cannot abort a long sweep.
-        dist_sink: if given, receives ``{(config label, algo): quantiles}`` of the
+        dist_sink: if given, receives ``{(config label, algo): ratios}``, the raw
             per-client radius ratio.  The CSV keeps only the mean and max, which cannot
             show what a typical client experiences; the randomized rounding pools every
             trial, so its distribution reflects the algorithm rather than one draw.

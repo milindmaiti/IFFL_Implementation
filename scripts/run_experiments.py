@@ -38,7 +38,7 @@ from iffl.configs import (  # noqa: E402
     Config,
     has_native_costs,
 )
-from iffl.pipeline import DIST_LEVELS, base_instance, run_config  # noqa: E402
+from iffl.pipeline import base_instance, run_config  # noqa: E402
 
 
 def build_configs(args) -> list[Config]:
@@ -114,7 +114,6 @@ def main(argv: list[str] | None = None) -> int:
         args.dump_radius_dist.parent.mkdir(parents=True, exist_ok=True)
         np.savez_compressed(
             args.dump_radius_dist,
-            levels=DIST_LEVELS,
             **{f"{label}||{algo}": q for (label, algo), q in dists.items()},
         )
         print(f"wrote {len(dists)} radius distributions to {args.dump_radius_dist}")

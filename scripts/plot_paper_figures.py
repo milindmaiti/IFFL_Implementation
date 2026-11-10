@@ -267,7 +267,8 @@ def main(argv=None) -> int:
     dp = Path("results/radius_dist.npz")
     if dp.exists():
         z = np.load(dp)
-        dist = {tuple(k.split("||")): z[k] for k in z.files if k != "levels"}
+        # Keys are "label||algo"; anything else is metadata from an older dump.
+        dist = {tuple(k.split("||")): z[k] for k in z.files if k.count("||") == 1}
     fig_cost(m, pal, a.out / "fig1-cost", a.format)
     fig_cost_absolute(m, pal, a.out / "fig2-cost-absolute", a.format)
     fig_fairness(m, pal, a.out / "fig3-fairness", a.format, dist=dist)
