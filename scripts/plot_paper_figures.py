@@ -2,8 +2,9 @@
 """The three figures for the paper, on UCI data.
 
 1. Cost      -- cost / LP bound against radius tightness.
-2. Fairness  -- worst radius violation against radius tightness, by radius scheme.
-3. Runtime   -- seconds against |E_R|, the quantity that actually drives it.
+2. Cost       -- unnormalised cost against radius tightness, with the LP optimum, so
+                 problem hardening is visible separately from algorithm error.
+3. Fairness  -- worst radius violation, and the distribution over clients.
 
 Styled for inclusion in a paper rather than for standalone reading: no titles, no
 annotations, no explanatory text.  Everything a reader needs beyond the axes belongs in
@@ -99,79 +100,109 @@ def fig_cost(main, pal, out: Path, fmt: str):
     ax.set_ylim(lo - pad, hi + pad)
     ax.set_xticks([1, 2, 3, 4])
     _grid(ax)
-    ax.legend(loc="upper left", handlelength=2.6, borderaxespad=0.2)
+    # Upper left is occupied by the two near-1 curves; the primal-dual's dip leaves the
+    # lower right clear.
+    ax.legend(loc="lower right", handlelength=2.6, borderaxespad=0.3)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
     piv.to_csv(out.with_suffix(".csv"))
 
 
-def fig_fairness(main, pal, out: Path, fmt: str):
-    """Worst radius violation, by radius scheme.
+def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
+    """Radius violation: the worst case against alpha, and the whole distribution.
 
-    The y-axis is logarithmic.  The primal-dual's breach reaches 12x its own bound, and
-    on a linear range of that size the LP rounding and the greedy collapse into two
-    indistinguishable lines on the axis.  A log scale keeps the natural quantity
-    ``d(j,sigma(j))/R_j`` and the ``3R`` rule where a reader expects them, while giving
-    the neighbourhood of 1 enough room to separate the LP rounding's climb to 1.21 from
-    the greedy's flat ``<= 1``.  Ticks are placed explicitly, since the default decade
-    ticks would label nothing between 1 and 10.
-
-    Columns split by radius scheme because the primal-dual's failure is a property of
-    radius heterogeneity, not of the algorithm alone: under Jung-Kannan-Lutz radii, which
-    are derived from client density and come out relatively homogeneous, it never breaches.
+    The left panel is a worst case over clients and configurations, which is the right
+    statistic for a guarantee but says nothing about a typical client.  The right panel
+    is the empirical CDF of the per-client ratio, reconstructed from the quantile grids
+    the sweep stores, and answers that instead.
     """
     d = uci(main)
     f = lambda s: np.nanmax(s[np.isfinite(s)])  # noqa: E731
-    panels = [("nearest_facility_multiple", r"radius multiplier $\alpha$", [1, 2, 3, 4]),
-              ("jkl_client_knn", r"neighbourhood parameter $k$", [5, 10, 20])]
-    yticks = [1, 1.25, 1.5, 2, 3, 5, 10]
+    fig, axes = plt.subplots(1, 2, figsize=(5.6, 2.7))
 
-    fig, axes = plt.subplots(1, 2, figsize=(5.6, 2.9), sharey=True)
-    for ax, (scheme, xlab, ticks) in zip(axes, panels):
-        piv = d[d.radius_scheme == scheme].pivot_table(
-            index="radius_param", columns="algo", values="max_radius_ratio", aggfunc=f)
-        for k, a in enumerate(ALGOS):
-            _series(ax, piv.index, piv[a], k, a, pal)
-        ax.axhline(3.0, color=pal["rule"], lw=0.8, ls="--")
-        ax.axhline(1.0, color=pal["rule"], lw=0.6, ls=":")
-        ax.set_yscale("log")
-        ax.yaxis.set_major_locator(FixedLocator(yticks))
-        ax.yaxis.set_major_formatter(FixedFormatter([f"{v:g}" for v in yticks]))
-        ax.yaxis.set_minor_formatter(NullFormatter())
-        ax.set_ylim(0.95, 15)
-        ax.set_xlabel(xlab)
-        ax.set_xticks(ticks)
-        _grid(ax)
-
+    piv = d[d.radius_scheme == "nearest_facility_multiple"].pivot_table(
+        index="radius_param", columns="algo", values="max_radius_ratio", aggfunc=f)
+    for k, a in enumerate(ALGOS):
+        _series(axes[0], piv.index, piv[a], k, a, pal)
+    axes[0].axhline(3.0, color=pal["rule"], lw=0.8, ls="--")
+    axes[0].axhline(1.0, color=pal["rule"], lw=0.6, ls=":")
+    axes[0].set_yscale("log")
+    top = float(np.nanmax(piv.to_numpy()))
+    yticks = [t for t in (1, 1.25, 1.5, 2, 3, 5, 10, 30, 100, 300) if t <= top * 1.6]
+    axes[0].set_ylim(0.95, top * 1.6)
+    axes[0].yaxis.set_major_locator(FixedLocator(yticks))
+    axes[0].yaxis.set_major_formatter(FixedFormatter([f"{v:g}" for v in yticks]))
+    axes[0].yaxis.set_minor_formatter(NullFormatter())
+    axes[0].set_xlabel(r"radius multiplier $\alpha$")
+    axes[0].set_xticks([1, 2, 3, 4])
     axes[0].set_ylabel(r"worst $d(j,\sigma(j))\,/\,R_j$")
-    axes[0].text(0.98, 3.0, "$3R$", transform=axes[0].get_yaxis_transform(),
-                 color=pal["muted"], fontsize=8, va="bottom", ha="right")
-    axes[1].legend(loc="upper left", handlelength=2.4, borderaxespad=0.4, labelspacing=0.3)
-    fig.subplots_adjust(wspace=0.07)
+    _grid(axes[0])
+
+    if dist:
+        levels = dist["levels"]
+        for k, a in enumerate(ALGOS):
+            qs = [v for (lbl, alg), v in dist["q"].items()
+                  if alg == a and "nearest_facility_multiple" in lbl]
+            if not qs:
+                continue
+            # Pooling quantile grids averages the inverse CDFs, which is the ECDF of the
+            # pooled population when the configurations contribute equally -- they do,
+            # each being one instance of the same client count.
+            axes[1].plot(np.mean(qs, axis=0), levels, lw=WIDTH[a], ls=DASH[a],
+                         color=pal["series"][k], label=LABEL[a])
+    axes[1].axvline(1.0, color=pal["rule"], lw=0.6, ls=":")
+    axes[1].axvline(3.0, color=pal["rule"], lw=0.8, ls="--")
+    axes[1].set_xlabel(r"$d(j,\sigma(j))\,/\,R_j$")
+    axes[1].set_ylabel("fraction of clients")
+    axes[1].set_ylim(0, 1.02)
+    axes[1].set_xlim(0, 3.4)
+    _grid(axes[1])
+    axes[1].legend(loc="lower right", handlelength=2.2, borderaxespad=0.3, labelspacing=0.25)
+
+    fig.subplots_adjust(wspace=0.32)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
     d.pivot_table(index=["radius_scheme", "radius_param"], columns="algo",
                   values="max_radius_ratio", aggfunc=f).to_csv(out.with_suffix(".csv"))
 
 
-def fig_runtime(scale, pal, out: Path, fmt: str):
-    d = scale[scale.algo.isin(ALGOS)].copy()
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
-    for k, a in enumerate(ALGOS):
-        s = d[d.algo == a].sort_values("n_edges")
-        bins = np.logspace(np.log10(s.n_edges.min()), np.log10(s.n_edges.max()), 11)
-        g = s.groupby(pd.cut(s.n_edges, bins=bins), observed=True).agg(
-            x=("n_edges", "median"), y=("runtime_s", "median"))
-        _series(ax, g.x, g.y, k, a, pal)
-    ax.set_xscale("log")
-    ax.set_yscale("log")
-    ax.set_xlabel(r"admissible edges $|E_R|$")
-    ax.set_ylabel("runtime (s)")
-    _grid(ax, axis="both")
-    ax.legend(loc="upper left", handlelength=2.6, borderaxespad=0.2)
+def fig_cost_absolute(main, pal, out: Path, fmt: str):
+    """Unnormalised cost against radius tightness, one panel per instance.
+
+    The ratio figure divides out the LP bound and so hides how much harder the problem
+    itself becomes as radii tighten.  This plots the costs themselves, with the LP
+    optimum as a fourth line: the gap between that line and the algorithms is their
+    error, while its own slope is the problem hardening.  Raw costs are not comparable
+    across instances of different size, hence one panel each rather than an average.
+    """
+    d = uci(main)
+    d = d[d.radius_scheme == "nearest_facility_multiple"]
+    specs = sorted(d.dataset.unique())
+
+    fig, axes = plt.subplots(1, len(specs), figsize=(5.6, 2.5), sharex=True)
+    axes = np.atleast_1d(axes)
+    for ax, spec in zip(axes, specs):
+        g = d[d.dataset == spec]
+        piv = g.pivot_table(index="radius_param", columns="algo", values="cost", aggfunc="mean")
+        lp = g.groupby("radius_param")["lp_obj"].mean()
+        ax.plot(lp.index, lp.values, lw=1.0, ls="-", color=pal["rule"], zorder=2,
+                label="LP bound")
+        for k, a in enumerate(ALGOS):
+            _series(ax, piv.index, piv[a], k, a, pal)
+        pool, n, m = spec.split(":")[1:4]
+        ax.set_title(f"{pool}, $m={m}$", color=pal["text"], fontsize=8.5, loc="left", pad=3)
+        ax.set_xlabel(r"radius multiplier $\alpha$")
+        ax.set_xticks([1, 2, 3, 4])
+        _grid(ax)
+    axes[0].set_ylabel("cost")
+    # Curves fall steeply from the left, so the legend goes under them on the right.
+    axes[-1].legend(loc="upper right", handlelength=2.0, borderaxespad=0.3,
+                    labelspacing=0.2, fontsize=7)
+    fig.subplots_adjust(wspace=0.28)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
-    d.groupby(["algo", "n", "m"])[["n_edges", "runtime_s"]].median().to_csv(out.with_suffix(".csv"))
+    d.pivot_table(index=["dataset", "radius_param"], columns="algo",
+                  values="cost", aggfunc="mean").to_csv(out.with_suffix(".csv"))
 
 
 def main(argv=None) -> int:
@@ -193,15 +224,18 @@ def main(argv=None) -> int:
     m = m[m.error.isna() | (m.error == "")]
     if (m.dataset.str.startswith("upstream:")).any():
         m = m[m.dataset.str.startswith("upstream:")]   # prefer the larger samples
-    sc = pd.read_csv("results/scale.csv")
-    sc = sc[sc.error.isna() | (sc.error == "")]
-
     pal = PALETTE
     style(pal)
     a.out.mkdir(parents=True, exist_ok=True)
+    dist = None
+    dp = Path("results/radius_dist.npz")
+    if dp.exists():
+        z = np.load(dp)
+        dist = {"levels": z["levels"],
+                "q": {tuple(k.split("||")): z[k] for k in z.files if k != "levels"}}
     fig_cost(m, pal, a.out / "fig1-cost", a.format)
-    fig_fairness(m, pal, a.out / "fig2-fairness", a.format)
-    fig_runtime(sc, pal, a.out / "fig3-runtime", a.format)
+    fig_cost_absolute(m, pal, a.out / "fig2-cost-absolute", a.format)
+    fig_fairness(m, pal, a.out / "fig3-fairness", a.format, dist=dist)
     print(f"wrote 3 figures (.{a.format} + .csv) to {a.out}/")
     return 0
 

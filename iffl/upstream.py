@@ -113,14 +113,38 @@ def load_bank_pool(cache_dir: Path = Path(".cache"), full: bool = True) -> Pool:
 
 
 def make_facilities(
-    pool: Pool, clients: np.ndarray, m: int, mode: str = "kmeans_pool", seed: int = 0
+    pool: Pool,
+    clients: np.ndarray,
+    m: int,
+    mode: str = "kmeans_pool",
+    seed: int = 0,
+    exclude: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Generate ``m`` candidate facility sites."""
+    """Generate ``m`` candidate facility sites.
+
+    Args:
+        exclude: pool rows the facilities may not be drawn from, used by ``sample_pool``
+            to keep a facility from landing exactly on a client. A coincident pair gives
+            that client a nearest-facility distance of 0, hence a radius of 0 under the
+            distance-based schemes, and an infinite radius ratio however it is served.
+            Exclusion is by *coordinate*, not index: both pools contain a few hundred
+            duplicate rows (418 in Adult, 434 in Bank), so dropping a client's own index
+            would still leave its twin available to be drawn as a facility.
+    """
     if mode not in FACILITY_MODES:
         raise KeyError(f"unknown facility mode {mode!r}; known: {', '.join(FACILITY_MODES)}")
     if mode == "sample_pool":
         rng = np.random.default_rng(seed)
-        return pool.coords[rng.choice(len(pool), m, replace=False)]
+        avail = np.arange(len(pool))
+        if exclude is not None:
+            _, klass = np.unique(pool.coords, axis=0, return_inverse=True)
+            taken = np.unique(klass[np.asarray(exclude)])
+            avail = avail[~np.isin(klass, taken)]
+        if avail.size < m:
+            raise ValueError(
+                f"pool has {avail.size} rows left after exclusions but {m} were requested"
+            )
+        return pool.coords[rng.choice(avail, m, replace=False)]
 
     from sklearn.cluster import KMeans
 
@@ -151,6 +175,6 @@ def sample_instance(
     for k, col in enumerate(pool.groups.columns):
         clients[f"c{k + 1}"] = pool.groups[col].to_numpy()[idx]
 
-    F = make_facilities(pool, coords, m, facility_mode, seed)
+    F = make_facilities(pool, coords, m, facility_mode, seed, exclude=idx)
     facilities = pd.DataFrame({f"d{k + 1}": F[:, k] for k in range(dim)})
     return clients, facilities

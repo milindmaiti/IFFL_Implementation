@@ -18,10 +18,17 @@ import numpy as np
 
 from iffl.instance import Instance
 
-MODES = ("constant", "uniform_random")
+MODES = ("constant", "uniform_random", "inverse_attractiveness")
 
-#: Cost multiples swept by the experiment driver.
-DEFAULT_SCALES = (0.1, 0.5, 1.0, 2.0, 5.0, 10.0)
+#: Clients used to score a facility site in the inverse-attractiveness scheme.
+ATTRACTIVENESS_K = 25
+
+#: Cost multiples swept by the experiment driver.  These bracket the point where
+#: opening and connection costs balance, which is where the LP relaxation is most often
+#: fractional and the rounding therefore does real work: measured fractional rates run
+#: 0% at c=2, 20% at c=4, 40% at c=7 and back to 20% by c=10, after which the optimal
+#: solution stops changing at all -- c=100 and c=1000 open an identical facility set.
+DEFAULT_SCALES = (4.0, 7.0, 15.0)
 
 
 def distance_unit(inst: Instance) -> float:
@@ -44,6 +51,34 @@ def distance_unit(inst: Instance) -> float:
     return float(positive.mean()) if positive.size else 1.0
 
 
+def attractiveness_weights(inst: Instance, k: int = ATTRACTIVENESS_K) -> np.ndarray:
+    """``(m,)`` cost multipliers that make well-placed facility sites expensive.
+
+    Score each site by how far it must reach to serve its ``k`` nearest clients,
+
+        a_i = (1/k) * sum over the k clients nearest i of d(i, j),
+
+    so a site in a dense region scores low.  Invert that, and normalise by its own mean,
+
+        w_i = (1 / a_i) / mean_l (1 / a_l),
+
+    which leaves ``w`` averaging exactly 1: it carries the relative desirability of each
+    site and none of the units, so the *mean* opening cost stays ``scale * distance_unit``
+    and ``scale`` keeps the same meaning as under the constant scheme.
+
+    The point is to give the LP something to decide.  With flat costs the well-placed
+    sites are simply better and get opened, and the relaxation is integral in the large
+    majority of configurations; pricing desirability turns that into a real trade-off
+    between a close expensive site and a distant cheap one.
+    """
+    if k < 1:
+        raise ValueError("k must be at least 1")
+    r = min(k, inst.n)
+    a = np.sort(inst.d, axis=0)[:r, :].mean(axis=0)
+    inv = 1.0 / np.maximum(a, 1e-12)
+    return inv / inv.mean()
+
+
 def synthesize(
     inst: Instance,
     scale: float,
@@ -57,6 +92,8 @@ def synthesize(
     elif mode == "uniform_random":
         rng = np.random.default_rng(seed)
         f = rng.uniform(0.5, 1.5, size=inst.m) * scale * unit
+    elif mode == "inverse_attractiveness":
+        f = scale * unit * attractiveness_weights(inst)
     else:
         raise KeyError(f"unknown cost mode {mode!r}; known: {', '.join(MODES)}")
     return f, {

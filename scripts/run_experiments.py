@@ -26,6 +26,7 @@ import sys
 import time
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -37,7 +38,7 @@ from iffl.configs import (  # noqa: E402
     Config,
     has_native_costs,
 )
-from iffl.pipeline import base_instance, run_config  # noqa: E402
+from iffl.pipeline import DIST_LEVELS, base_instance, run_config  # noqa: E402
 
 
 def build_configs(args) -> list[Config]:
@@ -53,7 +54,7 @@ def build_configs(args) -> list[Config]:
         for (scheme, param), scale in itertools.product(grid, scales):
             if scale is None and not has_native_costs(dataset):
                 continue
-            out.append(Config(dataset, scheme, param, scale))
+            out.append(Config(dataset, scheme, param, scale, cost_mode=args.cost_mode))
     return out
 
 
@@ -69,6 +70,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None, type=Path)
     ap.add_argument("--data-dir", default=None)
+    ap.add_argument("--facility-mode", default="kmeans_pool",
+                    help="how upstream instances place candidate facilities")
+    ap.add_argument("--cost-mode", default="constant",
+                    help="opening-cost scheme (see iffl.costs.MODES)")
+    ap.add_argument("--dump-radius-dist", default=None, type=Path,
+                    help="write per-client radius-ratio quantiles to this .npz")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument(
         "--strict",
@@ -83,8 +90,10 @@ def main(argv: list[str] | None = None) -> int:
         args.datasets = list(DATASETS) if args.all else ["synth-225-25"]
 
     configs = build_configs(args)
-    bases = {d: base_instance(d, args.data_dir) for d in {c.dataset for c in configs}}
+    bases = {d: base_instance(d, args.data_dir, facility_mode=args.facility_mode)
+             for d in {c.dataset for c in configs}}
 
+    dists: dict = {} if args.dump_radius_dist else None
     rows: list[dict] = []
     t_start = time.perf_counter()
     for k, cfg in enumerate(configs, 1):
@@ -97,8 +106,18 @@ def main(argv: list[str] | None = None) -> int:
             data_dir=args.data_dir,
             base=bases[cfg.dataset],
             strict=args.strict,
+            dist_sink=dists,
         )
     elapsed = time.perf_counter() - t_start
+
+    if dists is not None:
+        args.dump_radius_dist.parent.mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(
+            args.dump_radius_dist,
+            levels=DIST_LEVELS,
+            **{f"{label}||{algo}": q for (label, algo), q in dists.items()},
+        )
+        print(f"wrote {len(dists)} radius distributions to {args.dump_radius_dist}")
 
     df = pd.DataFrame(rows)
     if args.out:

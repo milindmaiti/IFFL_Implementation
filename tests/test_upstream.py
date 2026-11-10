@@ -112,3 +112,23 @@ def test_upstream_instance_spec_round_trip():
     assert inst.meta["pool"] == "adult"
     assert inst.meta["sample_seed"] == 3
     assert inst.d.shape == (400, 25)
+
+
+def test_sampled_facilities_never_coincide_with_clients():
+    """A facility drawn onto a client gives that client a nearest-facility distance of
+    zero, hence a zero radius under the distance-based schemes and an infinite radius
+    ratio however it is served.  The draw excludes the sampled client rows."""
+    from scipy.spatial.distance import cdist
+
+    pool = load_adult_pool(CACHE)
+    for seed in (0, 1, 2):
+        clients, facs = sample_instance(pool, 1500, 300, seed=seed,
+                                        facility_mode="sample_pool")
+        C = clients[[c for c in clients.columns if c.startswith("d")]].to_numpy()
+        assert cdist(C, facs.to_numpy()).min() > 0
+
+
+def test_sample_pool_rejects_an_impossible_request():
+    pool = load_bank_pool(CACHE, full=False)
+    with pytest.raises(ValueError, match="rows left after exclusions"):
+        sample_instance(pool, len(pool) - 5, 100, facility_mode="sample_pool")

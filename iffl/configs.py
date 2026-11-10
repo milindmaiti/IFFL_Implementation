@@ -12,7 +12,17 @@ SYNTHETIC_DATASETS = ("oddcycle-5", "oddcycle-9", "oddcycle-15")
 
 DATASETS = tuple(ALL_DATASETS) + SYNTHETIC_DATASETS
 
-#: (scheme, param) pairs.  Nonuniform schemes are the regime Approach A is built for;
+#: (scheme, param) pairs.
+#:
+#: The two multiplier schemes do not sweep the same range, because they do not behave
+#: the same way.  A uniform radius is forced by feasibility to be at least
+#: ``max_j d(j, F)``, set by the single worst-placed client, and under randomly drawn
+#: facilities that client sits about ten times further out than the median.  The radius
+#: is then already loose enough at ``mult = 1`` to admit 84% of all client-facility
+#: pairs, and by ``mult = 2`` it admits 99% -- the constraint stops binding, successive
+#: values give the same instance, and the LPs reach 1.6M variables.  Uniform radii are
+#: therefore swept only where they still restrict anything; the nonuniform schemes,
+#: which key off each client's own geometry, are unaffected and keep the full range.  Nonuniform schemes are the regime Approach A is built for;
 #: the uniform ones are the only regime where Approach B's bound is proved.
 RADIUS_GRID = (
     ("nearest_facility_multiple", 1.0),
@@ -22,8 +32,6 @@ RADIUS_GRID = (
     ("nearest_facility_multiple", 4.0),
     ("uniform", 1.0),
     ("uniform", 1.5),
-    ("uniform", 2.0),
-    ("uniform", 3.0),
     ("jkl_client_knn", 5),
     ("jkl_client_knn", 10),
     ("jkl_client_knn", 20),
