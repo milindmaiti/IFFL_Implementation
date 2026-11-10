@@ -132,9 +132,9 @@ def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
     """What fraction of clients are served beyond x times their radius.
 
     A worst case over clients answers the question a guarantee asks but hides how rare a
-    violation is, and a CDF compresses exactly the tail that matters.  The survival
-    function ``P(ratio > x)`` on log axes shows both: where each curve leaves 1 is the
-    typical client, and where it ends is the worst one.
+    violation is, and a CDF compresses exactly the tail that matters.  The complementary
+    CDF ``P(ratio > x)`` on log axes shows both: where each curve leaves 1 is the typical
+    client, and where it ends is the worst one.
     """
     if not dist:
         return
