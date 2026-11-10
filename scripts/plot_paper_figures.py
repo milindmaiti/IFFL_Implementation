@@ -84,6 +84,8 @@ def _series(ax, x, y, k, algo, pal):
             markeredgecolor=pal["surface"], markeredgewidth=0.7)
 
 
+ABS_COST_SCALE = 7.0   # see fig_cost_absolute
+
 SCHEMES = [("nearest_facility_multiple", "nearest-facility"),
            ("jkl_client_knn", "Jung–Kannan–Lutz")]
 
@@ -178,9 +180,15 @@ def fig_cost_absolute(main, pal, out: Path, fmt: str):
     across instances of different size, hence one column each rather than an average;
     within a column the two schemes price the same instance, so the rows share a y-scale
     and can be read against each other.
+
+    Fixed to a single opening-cost scale for the same reason.  Averaging raw cost over
+    the three scales would mix magnitudes that differ by 2.2x, and the hardening itself
+    grows with the scale (1.3x at c = 4 against 2.3x at c = 15), so an average over them
+    reports neither.  ABS_COST_SCALE is the middle value.
     """
     d = uci(main)
     d = d[d.radius_scheme.isin([s for s, _ in SCHEMES])]
+    d = d[d.cost_scale == ABS_COST_SCALE]
     specs = sorted(d.dataset.unique())
 
     fig, axes = plt.subplots(len(SCHEMES), len(specs), figsize=(5.8, 4.1), sharex=True,
