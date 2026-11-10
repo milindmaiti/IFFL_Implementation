@@ -117,6 +117,11 @@ def _row(cfg: Config, inst: Instance, lp, algo: str, **extra) -> dict:
         "radius_n_zero": inst.meta.get("radius_n_zero", 0),
         "R_min": float(inst.R.min()),
         "R_max": float(inst.R.max()),
+        # Scheme-independent tightness: how many times its own nearest-facility distance
+        # a typical client may travel.  For the multiplier scheme this is exactly its
+        # parameter, so it puts every scheme on one comparable axis.
+        "radius_eff_alpha": float(np.median(
+            inst.R / np.maximum(inst.nearest_facility_dist, 1e-12))),
         "cost_mode": inst.meta.get("cost_mode", cfg.cost_mode),
         "cost_scale": cfg.cost_scale,
         "n_edges": lp.n_edges,
@@ -127,9 +132,9 @@ def _row(cfg: Config, inst: Instance, lp, algo: str, **extra) -> dict:
     }
 
 
-#: Quantile levels stored per (configuration, algorithm) when a radius distribution is
-#: requested.  The quantile function is the inverse of the empirical CDF, so this grid
-#: reconstructs the ECDF to 0.1% and costs 1001 floats instead of one per client.
+#: Retained for callers that still read it; distributions are now stored as raw
+#: per-client ratios, since a quantile grid cannot resolve the extreme tail and the
+#: outliers are the interesting part.
 DIST_LEVELS = np.linspace(0.0, 1.0, 1001)
 
 
@@ -168,9 +173,8 @@ def run_config(
         t0 = time.perf_counter()
         a = lp_rounding_iffl(inst, trials=trials, seed=seed, lp=lp, check_fairness=strict)
         if dist_sink is not None:
-            pooled = np.concatenate([s_.radius_ratio for s_ in a["solutions"]])
-            dist_sink[(cfg.label, "lp_rounding")] = np.quantile(
-                pooled[np.isfinite(pooled)], DIST_LEVELS)
+            rr = np.concatenate([s_.radius_ratio for s_ in a["solutions"]])
+            dist_sink[(cfg.label, "lp_rounding")] = rr[np.isfinite(rr)].astype(np.float32)
         rows.append(_row(cfg, inst, lp, "lp_rounding",
                          cost=a["cost_mean"],
                          cost_ratio=a["cost_ratio_mean"],
@@ -196,8 +200,7 @@ def run_config(
         b = primal_dual_iffl(inst, lp=lp, check_fairness=strict and uniform)
         if dist_sink is not None:
             rr = b["solution"].radius_ratio
-            dist_sink[(cfg.label, "primal_dual")] = np.quantile(
-                rr[np.isfinite(rr)], DIST_LEVELS)
+            dist_sink[(cfg.label, "primal_dual")] = rr[np.isfinite(rr)].astype(np.float32)
         rows.append(_row(cfg, inst, lp, "primal_dual",
                          cost=b["cost"],
                          cost_ratio=b["cost_ratio"],
@@ -229,8 +232,7 @@ def run_config(
         c = greedy_iffl(inst, lp=lp, check_fairness=strict)
         if dist_sink is not None:
             rr = c["solution"].radius_ratio
-            dist_sink[(cfg.label, "greedy")] = np.quantile(
-                rr[np.isfinite(rr)], DIST_LEVELS)
+            dist_sink[(cfg.label, "greedy")] = rr[np.isfinite(rr)].astype(np.float32)
         rows.append(_row(cfg, inst, lp, "greedy",
                          cost=c["cost"],
                          cost_ratio=c["cost_ratio"],

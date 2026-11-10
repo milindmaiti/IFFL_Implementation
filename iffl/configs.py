@@ -32,9 +32,14 @@ RADIUS_GRID = (
     ("nearest_facility_multiple", 4.0),
     ("uniform", 1.0),
     ("uniform", 1.5),
-    ("jkl_client_knn", 5),
-    ("jkl_client_knn", 10),
+    # Chosen so each lands on roughly the same effective radius multiplier,
+    # median_j(R_j / d(j, F)), as a value of the nearest-facility sweep: k = 150, 50, 20
+    # and 10 measure about 1.5, 2.1, 3.0 and 3.8.  The two schemes then differ in radius
+    # *heterogeneity* at matched tightness rather than in tightness itself.
+    ("jkl_client_knn", 150),
+    ("jkl_client_knn", 50),
     ("jkl_client_knn", 20),
+    ("jkl_client_knn", 10),
 )
 
 #: Synthesized cost multiples.  ``None`` means "use the dataset's own costs", which

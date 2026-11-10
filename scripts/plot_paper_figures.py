@@ -84,86 +84,88 @@ def _series(ax, x, y, k, algo, pal):
             markeredgecolor=pal["surface"], markeredgewidth=0.7)
 
 
+SCHEMES = [("nearest_facility_multiple", "nearest-facility"),
+           ("jkl_client_knn", "Jung–Kannan–Lutz")]
+
+
+def _eff_alpha(g):
+    """Mean effective radius multiplier of a group, the scheme-independent x-coordinate."""
+    return g.groupby("radius_param")["radius_eff_alpha"].mean()
+
+
 def fig_cost(main, pal, out: Path, fmt: str):
-    d = uci(main)
-    d = d[d.radius_scheme == "nearest_facility_multiple"]
-    piv = d.pivot_table(index="radius_param", columns="algo", values="cost_ratio", aggfunc="mean")
+    """Cost relative to the LP bound, by radius scheme, on a shared tightness axis.
 
-    fig, ax = plt.subplots(figsize=(3.5, 2.5))
-    for k, a in enumerate(ALGOS):
-        _series(ax, piv.index, piv[a], k, a, pal)
-    ax.axhline(1.0, color=pal["rule"], lw=0.8)
-    ax.set_xlabel(r"radius multiplier $\alpha$")
-    ax.set_ylabel("cost / LP bound")
-    lo, hi = float(piv.to_numpy().min()), float(piv.to_numpy().max())
-    pad = max(0.0015, (hi - lo) * 0.12)
-    ax.set_ylim(lo - pad, hi + pad)
-    ax.set_xticks([1, 2, 3, 4])
-    _grid(ax)
-    # Upper left is occupied by the two near-1 curves; the primal-dual's dip leaves the
-    # lower right clear.
-    ax.legend(loc="lower right", handlelength=2.6, borderaxespad=0.3)
-    fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
-    plt.close(fig)
-    piv.to_csv(out.with_suffix(".csv"))
-
-
-def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
-    """Radius violation: the worst case against alpha, and the whole distribution.
-
-    The left panel is a worst case over clients and configurations, which is the right
-    statistic for a guarantee but says nothing about a typical client.  The right panel
-    is the empirical CDF of the per-client ratio, reconstructed from the quantile grids
-    the sweep stores, and answers that instead.
+    The two schemes parameterise tightness differently and in opposite directions -- a
+    larger multiplier loosens the radius, a larger neighbourhood count tightens it -- so
+    neither parameter can label a common axis.  Both are plotted against
+    ``median_j(R_j / d(j, F))`` instead, which is the multiplier scheme's own parameter by
+    definition and puts the two on one comparable scale: matched positions then differ in
+    radius *heterogeneity* rather than in tightness.
     """
     d = uci(main)
-    f = lambda s: np.nanmax(s[np.isfinite(s)])  # noqa: E731
-    fig, axes = plt.subplots(1, 2, figsize=(5.6, 2.7))
-
-    piv = d[d.radius_scheme == "nearest_facility_multiple"].pivot_table(
-        index="radius_param", columns="algo", values="max_radius_ratio", aggfunc=f)
-    for k, a in enumerate(ALGOS):
-        _series(axes[0], piv.index, piv[a], k, a, pal)
-    axes[0].axhline(3.0, color=pal["rule"], lw=0.8, ls="--")
-    axes[0].axhline(1.0, color=pal["rule"], lw=0.6, ls=":")
-    axes[0].set_yscale("log")
-    top = float(np.nanmax(piv.to_numpy()))
-    yticks = [t for t in (1, 1.25, 1.5, 2, 3, 5, 10, 30, 100, 300) if t <= top * 1.6]
-    axes[0].set_ylim(0.95, top * 1.6)
-    axes[0].yaxis.set_major_locator(FixedLocator(yticks))
-    axes[0].yaxis.set_major_formatter(FixedFormatter([f"{v:g}" for v in yticks]))
-    axes[0].yaxis.set_minor_formatter(NullFormatter())
-    axes[0].set_xlabel(r"radius multiplier $\alpha$")
-    axes[0].set_xticks([1, 2, 3, 4])
-    axes[0].set_ylabel(r"worst $d(j,\sigma(j))\,/\,R_j$")
-    _grid(axes[0])
-
-    if dist:
-        levels = dist["levels"]
+    fig, axes = plt.subplots(1, 2, figsize=(5.6, 2.5), sharey=True)
+    for ax, (scheme, name) in zip(axes, SCHEMES):
+        g = d[d.radius_scheme == scheme]
+        x = _eff_alpha(g)
+        piv = g.pivot_table(index="radius_param", columns="algo", values="cost_ratio",
+                            aggfunc="mean")
         for k, a in enumerate(ALGOS):
-            qs = [v for (lbl, alg), v in dist["q"].items()
-                  if alg == a and "nearest_facility_multiple" in lbl]
-            if not qs:
-                continue
-            # Pooling quantile grids averages the inverse CDFs, which is the ECDF of the
-            # pooled population when the configurations contribute equally -- they do,
-            # each being one instance of the same client count.
-            axes[1].plot(np.mean(qs, axis=0), levels, lw=WIDTH[a], ls=DASH[a],
-                         color=pal["series"][k], label=LABEL[a])
-    axes[1].axvline(1.0, color=pal["rule"], lw=0.6, ls=":")
-    axes[1].axvline(3.0, color=pal["rule"], lw=0.8, ls="--")
-    axes[1].set_xlabel(r"$d(j,\sigma(j))\,/\,R_j$")
-    axes[1].set_ylabel("fraction of clients")
-    axes[1].set_ylim(0, 1.02)
-    axes[1].set_xlim(0, 3.4)
-    _grid(axes[1])
-    axes[1].legend(loc="lower right", handlelength=2.2, borderaxespad=0.3, labelspacing=0.25)
-
-    fig.subplots_adjust(wspace=0.32)
+            _series(ax, x.loc[piv.index].values, piv[a].values, k, a, pal)
+        ax.axhline(1.0, color=pal["rule"], lw=0.8)
+        ax.set_xlabel(r"effective multiplier $R_j / d(j,F)$")
+        ax.set_title(name, color=pal["muted"], fontsize=8.5, loc="left", pad=3)
+        ax.set_xlim(0.8, 4.2)
+        _grid(ax)
+    axes[0].set_ylabel("cost / LP bound")
+    axes[0].legend(loc="lower right", handlelength=2.2, borderaxespad=0.3, labelspacing=0.25)
+    fig.subplots_adjust(wspace=0.08)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
     d.pivot_table(index=["radius_scheme", "radius_param"], columns="algo",
-                  values="max_radius_ratio", aggfunc=f).to_csv(out.with_suffix(".csv"))
+                  values="cost_ratio", aggfunc="mean").to_csv(out.with_suffix(".csv"))
+
+
+def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
+    """What fraction of clients are served beyond x times their radius.
+
+    A worst case over clients answers the question a guarantee asks but hides how rare a
+    violation is, and a CDF compresses exactly the tail that matters.  The survival
+    function ``P(ratio > x)`` on log axes shows both: where each curve leaves 1 is the
+    typical client, and where it ends is the worst one.
+    """
+    if not dist:
+        return
+    fig, axes = plt.subplots(1, 2, figsize=(5.6, 2.6), sharey=True)
+    rows = []
+    for ax, (scheme, name) in zip(axes, SCHEMES):
+        for k, a in enumerate(ALGOS):
+            vs = [v for (lbl, alg), v in dist.items() if alg == a and scheme in lbl]
+            if not vs:
+                continue
+            v = np.sort(np.concatenate(vs))
+            surv = 1.0 - np.arange(v.size) / v.size
+            step = max(1, v.size // 4000)          # thin for a compact vector file
+            ax.plot(v[::step], surv[::step], lw=WIDTH[a], ls=DASH[a],
+                    color=pal["series"][k], label=LABEL[a])
+            rows.append({"scheme": scheme, "algo": a, "n_clients": v.size,
+                         "frac_over_1": float((v > 1).mean()),
+                         "frac_over_3": float((v > 3).mean()), "max": float(v.max())})
+        ax.axvline(1.0, color=pal["rule"], lw=0.6, ls=":")
+        ax.axvline(3.0, color=pal["rule"], lw=0.8, ls="--")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_ylim(2e-5, 1.6)
+        ax.set_xlim(0.15, 300)
+        ax.set_xlabel(r"$x = d(j,\sigma(j))\,/\,R_j$")
+        ax.set_title(name, color=pal["muted"], fontsize=8.5, loc="left", pad=3)
+        _grid(ax, axis="both")
+    axes[0].set_ylabel(r"fraction of clients $> x$")
+    axes[0].legend(loc="lower left", handlelength=2.2, borderaxespad=0.3, labelspacing=0.25)
+    fig.subplots_adjust(wspace=0.08)
+    fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
+    plt.close(fig)
+    pd.DataFrame(rows).to_csv(out.with_suffix(".csv"), index=False)
 
 
 def fig_cost_absolute(main, pal, out: Path, fmt: str):
@@ -231,8 +233,7 @@ def main(argv=None) -> int:
     dp = Path("results/radius_dist.npz")
     if dp.exists():
         z = np.load(dp)
-        dist = {"levels": z["levels"],
-                "q": {tuple(k.split("||")): z[k] for k in z.files if k != "levels"}}
+        dist = {tuple(k.split("||")): z[k] for k in z.files if k != "levels"}
     fig_cost(m, pal, a.out / "fig1-cost", a.format)
     fig_cost_absolute(m, pal, a.out / "fig2-cost-absolute", a.format)
     fig_fairness(m, pal, a.out / "fig3-fairness", a.format, dist=dist)
