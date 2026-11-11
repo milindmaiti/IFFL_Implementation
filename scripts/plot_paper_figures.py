@@ -195,7 +195,8 @@ def fig_cost_absolute(main, pal, out: Path, fmt: str):
     d = d[d.cost_scale == ABS_COST_SCALE]
     specs = sorted(d.dataset.unique())
 
-    fig, axes = plt.subplots(len(SCHEMES), len(specs), figsize=(5.8, 4.1), sharex=True,
+    # Aspect kept low: at \textwidth this float must leave room for text on its page.
+    fig, axes = plt.subplots(len(SCHEMES), len(specs), figsize=(5.8, 3.2), sharex=True,
                              squeeze=False)
     panels = {}
     for r, (scheme, sname) in enumerate(SCHEMES):
@@ -233,11 +234,11 @@ def fig_cost_absolute(main, pal, out: Path, fmt: str):
     for r, (_, sname) in enumerate(SCHEMES):
         axes[r][0].set_ylabel(f"{sname}\ncost")
     # One shared x-label: four per-column copies collide at this width.
-    fig.supxlabel(r"effective multiplier $R_j / d(j,F)$", fontsize=9, y=0.02)
+    fig.supxlabel(r"effective multiplier $R_j / d(j,F)$", fontsize=9, y=0.035)
     # Curves fall steeply from the left, so the legend goes under them on the right.
     axes[0][-1].legend(loc="upper right", handlelength=2.0, borderaxespad=0.3,
                        labelspacing=0.2, fontsize=7)
-    fig.subplots_adjust(wspace=0.34, hspace=0.22)
+    fig.subplots_adjust(wspace=0.34, hspace=0.26, bottom=0.155)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
     pd.concat({f"{sname}|{specs[c]}": panels[(r, c)]

@@ -14,8 +14,12 @@ The two guarantees are checked differently, because the papers state them differ
   by how much is one of the more interesting things the sweep reports.
 
 Usage:
-    python scripts/run_experiments.py --datasets synth-225-25 --trials 20 --verbose
-    python scripts/run_experiments.py --all --trials 50 --out results/results.csv
+    python scripts/run_experiments.py --datasets upstream:adult:1000:200:0 --verbose
+    python scripts/run_experiments.py --datasets upstream:adult:1000:200:0 \
+        --facility-mode sample_pool --cost-mode inverse_attractiveness \
+        --cost-scales 4 7 15 --trials 50 --strict \
+        --dump-radius-dist results/radius_dist.npz \
+        --out results/results_upstream.csv
 """
 
 from __future__ import annotations

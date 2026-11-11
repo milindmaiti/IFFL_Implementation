@@ -23,7 +23,7 @@ from iffl.upstream import (
 CACHE = Path(".cache")
 pytestmark = pytest.mark.skipif(
     not (CACHE / "adult.zip").exists() or not (CACHE / "bank.zip").exists(),
-    reason="upstream archives not cached; run scripts/run_scale_study.py once to fetch",
+    reason="upstream archives not cached; run scripts/run_experiments.py on an\n            upstream: dataset once to fetch",
 )
 
 

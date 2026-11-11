@@ -69,23 +69,28 @@ python3 -m venv .venv
 # 1. unit tests, including every invariant the three proofs rely on
 .venv/bin/python -m pytest tests/ -q
 
-# 2. full sweep: 657 configurations x 5 algorithms  (~1 min)
+# 2. the paper's sweep: 132 configurations x 3 algorithms
 #    --strict aborts on any guarantee violation rather than recording it
-.venv/bin/python scripts/run_experiments.py --all --trials 50 --strict \
-    --out results/results.csv
+.venv/bin/python scripts/run_experiments.py \
+    --datasets upstream:adult:1000:200:0 upstream:adult:1000:400:0 \
+               upstream:bank:1000:200:0  upstream:bank:1000:400:0 \
+    --facility-mode sample_pool --cost-mode inverse_attractiveness \
+    --cost-scales 4 7 15 --trials 50 --strict \
+    --dump-radius-dist results/radius_dist.npz \
+    --out results/results_upstream.csv
 
-# 3. figures, light and dark, each with a CSV table view
-.venv/bin/python scripts/plot_results.py
-.venv/bin/python scripts/plot_results.py --dark
-
-# optional: materialize (radii, costs) sidecars + a provenance manifest
-.venv/bin/python scripts/make_iffl_instances.py --out instances/
+# 3. the three paper figures as vector PDF, each with a CSV table view
+.venv/bin/python scripts/plot_paper_figures.py --format pdf
 ```
 
-A single instance, for a quick look:
+Instances are drawn from the full UCI pools; the first call downloads and caches the
+archives under `.cache/`.
+
+A single configuration, for a quick look:
 
 ```bash
-.venv/bin/python scripts/run_experiments.py --datasets synth-225-25 \
+.venv/bin/python scripts/run_experiments.py --datasets upstream:adult:1000:200:0 \
+    --facility-mode sample_pool --cost-mode inverse_attractiveness \
     --radius nearest_facility_multiple --alpha 2.0 --trials 20 --verbose
 ```
 
@@ -96,7 +101,7 @@ A single instance, for a quick look:
 ```
 iffl/
   instance.py     Instance dataclass; distance matrix
-  loaders.py      the six CSV pairs and two workbooks under data/
+  loaders.py      the bundled test fixtures under data/
   radii.py        uniform / nearest-facility-multiple / Jung–Kannan–Lutz schemes
   costs.py        opening-cost synthesis for the datasets that lack costs
   lp.py           restricted LP over E_R, via scipy + HiGHS
@@ -106,74 +111,55 @@ iffl/
   synthetic.py    odd-cycle instances with a half-integral LP
   evaluate.py     shared metrics and two baselines
   configs.py      the experiment grid
+  upstream.py     rebuild the full UCI pools; sample arbitrary instances
   pipeline.py     build an instance from a config, run everything on it
 scripts/
-  run_experiments.py       sweep → results/results.csv
-  plot_results.py          figures + CSV table views
-  make_iffl_instances.py   write (R, f) sidecars + manifest to instances/
-data/                      benchmark instances; see data/SOURCES.md
-tests/                     266 tests
+  run_experiments.py       sweep → results/results_upstream.csv
+  plot_paper_figures.py    the three paper figures + CSV table views
+data/                      test fixtures; see data/SOURCES.md
+tests/                     316 tests
 ```
 
 ---
 
 ## Datasets
 
-Bundled under [`data/`](data/) and described in [`data/SOURCES.md`](data/SOURCES.md).
-
-| dataset | n | m | n/m | dim | groups | native costs | LP fractional |
-|---|---|---|---|---|---|---|---|
-| `adult-500-20` | 500 | 20 | 25 | 6 | race(5), sex(2) | no | 0% |
-| `adult-429-65` | 429 | 65 | 6.6 | 6 | race(5), sex(2) | no | 19.4% |
-| `bank-500-20` | 500 | 20 | 25 | 3 | job(12), marital(3), educ(4), default(2) | no | 0% |
-| `synth-225-25` | 250 | 10 | 25 | 2 | in/out | 40/80 | 0% |
-| `synth-500-40` | 550 | 20 | 27.5 | 2 | in/out | 40/80 | 0% |
-| `synth-500-50` | 550 | 20 | 27.5 | 2 | in/out | 40/80 | 0% |
-| `uflp-49` | 49 | 49 | 1.0 | lat/lon | party(2) | 3.8–16.1 | 22.6% |
-| `uflp-88` | 88 | 88 | 1.0 | lat/lon | region(3) | 2.6–29.9 | 7.1% |
-| `oddcycle-{5,9,15}` | k | k | 1.0 | synthetic | — | uniform | 100% |
-
-Categorical columns are carried for analysis only; no algorithm here uses them.
-
-Two structural facts drive most of the behaviour below:
-
-* **Fractionality tracks facilities-per-client.** Every dataset with `m/n ≈ 0.04` has an
-  integral LP optimum in every configuration; the only fractional ones are
-  `adult-429-65` (`m/n = 0.15`) and the two workbooks (`m/n = 1.0`). To get instances
-  where the LP rounding does real work, you need more candidate facilities.
-* **Radius heterogeneity drives Approach B's failures.** The synthetic sets plant 10%
-  `out` clients that sit 1.6–3.5× farther from facilities than the rest, giving the
-  widest `R_max/R_med` spread in the corpus — and they produce B's worst nonuniform
-  violations.
-
-### Sampling larger instances
-
-The bundled files are small samples (429–550 clients) of surveys with ~45,000 rows.
-[`iffl/upstream.py`](iffl/upstream.py) rebuilds those populations and draws arbitrarily
-larger instances. The preprocessing was recovered by matching each bundled file's `id`
-column against the upstream data, and reproduces the bundled coordinates to within
-`1e-12` — so a freshly sampled 5,000-client instance is *comparable* with the bundled
-one, not merely similar.
+The experiments draw their instances from the **full UCI pools**, rebuilt by
+[`iffl/upstream.py`](iffl/upstream.py) and addressed as
+`upstream:<pool>:<n>:<m>[:<seed>]`, e.g. `upstream:adult:1000:200:0`.
 
 | pool | rows | preprocessing |
 |---|---|---|
 | `adult` | 45,222 | `adult.data` + `adult.test`, rows with missing values dropped; `age, fnlwgt, education-num, capital-gain, capital-loss, hours-per-week` z-scored with the **population** std |
 | `bank` | 45,211 | `bank-full.csv`; `age, balance, duration`, same scaling |
 
-The bundled `bank-500-20` comes from `bank.csv` (4,521 rows), not `bank-full.csv`; the
-sampler uses the larger pool by default, which changes the normalisation base and is
-recorded in each instance's provenance. Facilities in the bundled files are not pool
-rows but synthetic points closest in geometry to k-means centroids of the population, so
-`kmeans_pool` is the default generator — a reconstruction, not a claim to reproduce the
-original generator exactly.
+The paper uses four instances: each pool at `n = 1000` with `m ∈ {200, 400}`. Candidate
+facilities are drawn from the records themselves (`--facility-mode sample_pool`), so
+sites are real locations; any record whose coordinates coincide with a sampled client is
+excluded, keeping `d(j,F) > 0` for every client. Opening costs are synthesised by
+`--cost-mode inverse_attractiveness`, which prices a site by how cheaply it can reach
+nearby clients, so a facility amid many clients is a genuine trade-off rather than a free
+choice. Under uniform costs the instance is a `k`-median problem for a suitable `k`,
+which is exactly the regime where the relaxation tends to be integral.
 
-```bash
-python scripts/run_scale_study.py --pools adult bank --out results/scale.csv
-```
+### Bundled fixtures — tests only
 
-Instances are addressed as `upstream:<pool>:<n>:<m>[:<seed>]`, e.g.
-`upstream:adult:5000:1000`, and work anywhere a dataset name does. The first call
-downloads and caches the archives under `.cache/`.
+[`data/`](data/) holds small instances (429–550 clients) sampled from the same two
+surveys, two UFLP workbooks, and three synthetic sets; see
+[`data/SOURCES.md`](data/SOURCES.md). **Nothing in the paper is computed from them.**
+They are kept because they serve two purposes for the test suite:
+
+* most of the 316 tests run against them — small enough to be fast, and checked in, so
+  the suite runs without network access (the oracle tests below skip when the upstream
+  archives are not yet cached);
+* [`tests/test_upstream.py`](tests/test_upstream.py) uses them as an *oracle*. The
+  preprocessing in `upstream.py` was recovered by matching each bundled file's `id`
+  column against the upstream data, and reproduces the bundled coordinates to within
+  `1e-12`. That check is what licenses treating a freshly sampled instance as
+  comparable with the published one rather than merely similar.
+
+They also pin down three degenerate cases the experiments never hit but the code must
+survive; see [Implementation notes](#implementation-notes).
 
 ### Radius schemes
 
@@ -195,76 +181,51 @@ admissible edge and makes the LP infeasible).
 
 ## Results
 
-From `results/results.csv` — 657 configurations (dataset × radius scheme × cost scale)
-× 5 algorithms. Approach A is averaged over 50 independent roundings per configuration.
+From `results/results_upstream.csv` — 132 configurations (4 instances x 3 opening-cost
+scales x 11 radius settings) x 3 algorithms, Approach A averaged over 50 independent
+roundings. The LP relaxation is **fractional in 72 of the 132**, so the rounding does
+real work rather than reproducing an integral optimum.
 
-| algorithm | mean cost / LP | max | worst radius ratio |
-|---|---|---|---|
-| A: LP rounding | 1.017 | 1.602 | 3.000 — bound 3, **0 violations** |
-| B: primal-dual, uniform radii | 1.012 | — | 3.000 — bound 3, **0 violations** |
-| B: primal-dual, nonuniform radii | 1.012 | 1.200 | exceeds 3 in **76/424** configs |
-| **C: greedy (strictly fair)** | **1.006** | **1.196** | **1.000** — bound 1, 0 violations |
-| baseline: threshold rounding | 1.012 | 2.648 | opens nothing on a fractional LP |
-| baseline: set-cover greedy | 1.781 | 40.43 | 1.000 by construction |
-
-* **Approach A** never violated `3R_j` on any trial of any configuration, and its mean
-  cost ratio stayed under 1.725 everywhere (max 1.602, on a fractional instance).
-* **Approach B** satisfied `C + 3F ≤ 3·Σα` in all 233 uniform-radius configurations.
-  On nonuniform radii it exceeds `3R_j` in 76 of 424, worst finite ratio 44.1 — the
-  concrete form of the uniform-radii requirement, and the gap Approach A closes.
-* **Approach C** was both the fairest and the cheapest on this data: strictly fair in
-  all 657 configurations, mean ratio 1.006, never above 1.861 (max 1.196). On the 54
-  fractional-LP configurations, where the comparison is meaningful, it averaged 1.044
-  against A's 1.181.
-
-Keep that last point in proportion: these are *empirical* ratios on eight geometric
-datasets, not worst cases. A and B carry proved worst-case guarantees that C, in the
-restricted setting, does not.
-
-### At larger scale
-
-`results/scale.csv` resamples both pools across instance sizes up to 5,000 clients and
-1,000 facilities (540 rows). Two things come out of it.
-
-**Fractional LPs appear exactly where `m/n` predicts**, on real data:
-
-| `m/n` | adult | bank |
-|---|---|---|
-| 0.01 | 0% | 0% |
-| 0.04 | 0% | 0% |
-| 0.05 | 0% | 0% |
-| 0.20 | 22% | 17% |
-| 0.50 | 33% | 17% |
-
-Bank fractures less readily than Adult — its feature space is 3-D against Adult's 6-D,
-so facilities are easier to place well and the LP has less room to hedge.
-
-**The algorithms converge at scale.** On the fractional-LP configurations, which are the
-only ones where the three differ at all:
-
-| algorithm | bundled, all | bundled, real data only | upstream (n = 500–5000) | upstream max |
+| algorithm | mean cost / LP | max | min | worst radius ratio |
 |---|---|---|---|---|
-| A: LP rounding | 1.181 | 1.033 | **1.012** | 1.024 |
-| B: primal-dual | 0.992 | 1.014 | 1.042 | 1.087 |
-| C: greedy | 1.044 | 1.014 | **1.009** | 1.018 |
+| A: LP rounding | 1.018 | 1.136 | 1.000 | 1.474 — bound 3, **never exceeded** |
+| B: primal-dual | 0.944 | 1.110 | **0.474** | **215.9** — bound 3, uniform radii only |
+| **C: greedy (strictly fair)** | **1.014** | **1.082** | 1.000 | **1.000** — bound 1, never exceeded |
 
-A's apparent weakness on the bundled data was an artifact of small instances: 21 of
-those 60 fractional configurations are 5–15 node odd cycles, where its rounding pays its
-worst price. Strip those out and the spread already narrows; resample at realistic size
-and A and C are within 0.3% of each other. **The honest summary is that on fractional
-instances at scale all three sit within ~4% of the LP bound, and Approach C's real
-advantage is its fairness — strictly within `R_j` — rather than its cost.**
+* **Approach A** stays far inside both guarantees: never past `1.474 R_j` against a
+  bound of `3`, and exact on the 60 configurations where the LP optimum is integral.
+  Pooled over clients it serves at least **99.86%** of them within their radius under
+  either client-specific scheme — and 99.99% restricted to the fractional
+  configurations, where the rounding is actually exercised.
+* **Approach B** falls as low as `0.474`, below a bound that constrains only strictly
+  fair solutions. It exceeds its radius for about a fifth of client assignments under
+  either scheme, but the tails diverge sharply: never past `2.22` under
+  Jung–Kannan–Lutz radii, against `2.7%` of assignments past `3R_j` and a worst case of
+  `216` under the nearest-facility multiple, which inherits the dispersion of outlying
+  clients so that a witness may carry a radius many times that of the client routed
+  through it. Its whole distribution is shifted, not just its tail: the median client
+  sits at `0.78` of its radius, against `0.57` for the other two.
+* **Approach C** is strictly fair in every configuration at `1.4%` above the LP bound on
+  average. Theorem 2 of the paper rules out an `o(log n)` cost factor for any strictly
+  fair algorithm unless `P = NP`; that bound is realised by instances encoding Set Cover
+  rather than by geometric data.
 
-Every guarantee continues to hold at this scale: 0 violations in 54 uniform-radius
-configurations per algorithm. Approach B still breaks on nonuniform radii, in 20 of 54,
-worst ratio 28.8.
+Two structural facts drive the rest:
+
+* **Fractionality tracks the radius scheme.** 81% of the Jung–Kannan–Lutz configurations
+  are fractional, against 15% of the nearest-facility ones. It is near-insensitive to
+  the opening-cost scale over the range swept (57% / 55% / 52% at `c = 4 / 7 / 15`).
+* **A feasible uniform radius constrains almost nothing here.** It must reach the
+  worst-placed client, who is a far outlier, so the scheme admits 91–100% of all
+  `(i,j)` pairs. It is swept and reported but omitted from the figures; the comparisons
+  above are over all 132 configurations, the figures over the 108 client-specific ones.
 
 ### Reading the cost ratios
 
 The denominator is the **LP relaxation** optimum over `E_R`, never `OPT_fair`. No
 optimum is computed anywhere and none is needed: since `LP ≤ OPT_fair`, we have
 `cost/LP ≥ cost/OPT_fair`, so every guarantee verified against the LP holds a fortiori
-against the true optimum. The check is conservative, never flattering. On the 597
+against the true optimum. The check is conservative, never flattering. On the 60
 integral-LP configurations `LP = OPT_fair` exactly, so those ratios *are* the true
 approximation ratios.
 
@@ -283,15 +244,15 @@ still computed and reported (`witness_cost`, `witness_max_radius_ratio`) for com
 serving from the nearest open facility is worth about 1% of cost and tightens the worst
 radius ratio too.
 
-Figures are in `results/figures/`, light and dark, each with a CSV table view. The
-tradeoff panel is restricted to uniform radii, the only regime where all three
-algorithms are comparable.
+Figures are written to `results/paper/`, as vector PDF with a CSV table view beside
+each.
 
 ---
 
 ## Implementation notes
 
-Four things these datasets make easy to get wrong, each covered by a test.
+Four things the bundled fixtures make easy to get wrong, each covered by a test.
+None arises in the experiments themselves; the fixtures exist partly to keep them tested.
 
 1. **Clients sitting on facility sites.** In both workbooks clients and facilities are
    the *same* point set, so every client's nearest-facility distance is exactly 0. A
