@@ -85,6 +85,7 @@ def _series(ax, x, y, k, algo, pal):
 
 
 ABS_COST_SCALE = 7.0   # see fig_cost_absolute
+XMAX_FAIR = 1.1        # see fig_fairness
 
 SCHEMES = [("nearest_facility_multiple", "nearest-facility"),
            ("jkl_client_knn", "Jung–Kannan–Lutz")]
@@ -132,9 +133,12 @@ def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
     """What fraction of clients are served beyond x times their radius.
 
     A worst case over clients answers the question a guarantee asks but hides how rare a
-    violation is, and a CDF compresses exactly the tail that matters.  The complementary
-    CDF ``P(ratio > x)`` on log axes shows both: where each curve leaves 1 is the typical
-    client, and where it ends is the worst one.
+    violation is, and a CDF compresses exactly the region that separates the algorithms.
+    The complementary CDF ``P(ratio > x)`` shows the whole picture, but almost all of its
+    mass sits at ``x <= 1``: the far tail is one algorithm's thin filament and costs most
+    of the axis to draw.  So the view stops just past 1, where the curve's height is the
+    violation rate itself, and both axes can be linear and read directly.  The tail
+    beyond is reported as statistics in the CSV rather than drawn.
     """
     if not dist:
         return
@@ -147,23 +151,23 @@ def fig_fairness(main, pal, out: Path, fmt: str, dist: dict | None = None):
                 continue
             v = np.sort(np.concatenate(vs))
             surv = 1.0 - np.arange(v.size) / v.size
-            step = max(1, v.size // 4000)          # thin for a compact vector file
-            ax.plot(v[::step], surv[::step], lw=WIDTH[a], ls=DASH[a],
+            keep = v <= XMAX_FAIR                   # drawn region only
+            step = max(1, int(keep.sum()) // 4000)  # thin for a compact vector file
+            ax.plot(v[keep][::step], surv[keep][::step], lw=WIDTH[a], ls=DASH[a],
                     color=pal["series"][k], label=LABEL[a])
             rows.append({"scheme": scheme, "algo": a, "n_clients": v.size,
+                         "median": float(np.median(v)),
                          "frac_over_1": float((v > 1).mean()),
                          "frac_over_3": float((v > 3).mean()), "max": float(v.max())})
-        ax.axvline(1.0, color=pal["rule"], lw=0.6, ls=":")
-        ax.axvline(3.0, color=pal["rule"], lw=0.8, ls="--")
-        ax.set_xscale("log")
-        ax.set_yscale("log")
-        ax.set_ylim(2e-5, 1.6)
-        ax.set_xlim(0.15, 300)
+        ax.axvline(1.0, color=pal["rule"], lw=0.8, ls="--")
+        ax.set_xlim(0, XMAX_FAIR)
+        ax.set_ylim(0, 1.02)
         ax.set_xlabel(r"$x = d(j,\sigma(j))\,/\,R_j$")
         ax.set_title(name, color=pal["muted"], fontsize=8.5, loc="left", pad=3)
         _grid(ax, axis="both")
     axes[0].set_ylabel(r"fraction of clients $> x$")
-    axes[0].legend(loc="lower left", handlelength=2.2, borderaxespad=0.3, labelspacing=0.25)
+    axes[0].legend(loc="lower left", handlelength=2.2, borderaxespad=0.3,
+                   labelspacing=0.25)
     fig.subplots_adjust(wspace=0.08)
     fig.savefig(out.with_suffix(f".{fmt}"), dpi=400)
     plt.close(fig)
