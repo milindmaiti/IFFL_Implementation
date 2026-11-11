@@ -116,6 +116,7 @@ iffl/
 scripts/
   run_experiments.py       sweep → results/results_upstream.csv
   plot_paper_figures.py    the three paper figures + CSV table views
+  run_hardness_study.py    Theorem 2 on the Set Cover reduction (not in the paper)
 data/                      test fixtures; see data/SOURCES.md
 tests/                     316 tests
 ```
@@ -157,9 +158,6 @@ They are kept because they serve two purposes for the test suite:
   column against the upstream data, and reproduces the bundled coordinates to within
   `1e-12`. That check is what licenses treating a freshly sampled instance as
   comparable with the published one rather than merely similar.
-
-They also pin down three degenerate cases the experiments never hit but the code must
-survive; see [Implementation notes](#implementation-notes).
 
 ### Radius schemes
 
@@ -246,42 +244,6 @@ radius ratio too.
 
 Figures are written to `results/paper/`, as vector PDF with a CSV table view beside
 each.
-
----
-
-## Implementation notes
-
-Four things the bundled fixtures make easy to get wrong, each covered by a test.
-None arises in the experiments themselves; the fixtures exist partly to keep them tested.
-
-1. **Clients sitting on facility sites.** In both workbooks clients and facilities are
-   the *same* point set, so every client's nearest-facility distance is exactly 0. A
-   radius of `α · 0` is 0 for every `α`: `E_R` collapses to self-edges, each client is
-   served by itself, and the LP must open all `m` facilities. Hence the `rank` argument
-   on the distance-based schemes. The same zero leaked into cost synthesis, where the
-   unit is a mean nearest-facility distance; `costs.distance_unit` steps up ranks until
-   it finds a positive scale.
-
-2. **`d / R` when `R = 0`.** One client of `adult-429-65` coincides exactly with a
-   facility, so `R_j = 0` legitimately. Reporting `nan` would silently defeat every
-   `≤ 3` assertion, since `nan ≤ 3` and `nan > 3` are both false. `evaluate.radius_ratio`
-   resolves it by the constraint instead: 0 when the client is served at distance 0,
-   `inf` when it is not.
-
-3. **Catastrophic cancellation in the distance matrix.** The usual
-   `|a|² + |b|² − 2a·b` expansion returns a self-distance near `1e-6` on raw lat/lon,
-   which then perturbs every radius keyed on the nearest-facility distance. `cdist` is
-   used instead.
-
-4. **Integral LPs hiding the interesting code path.** Where the LP optimum is integral,
-   each client's close set sits inside one facility, so Approach A deterministically
-   reproduces the LP and returns ratio 1.000 — correct, but exercising neither the
-   splitting, the filtering, nor the randomized rounding.
-   `synthetic.odd_cycle_instance` supplies a controlled half-integral case: facilities
-   on an odd cycle's vertices, clients on its edges, so the LP reduces to fractional
-   vertex cover and `y_i = 1/2`. Its distances come from the incidence graph's shortest
-   paths, because the `3R` argument walks a client → facility → client → facility path
-   and so needs the triangle inequality across all of `F ∪ C`.
 
 ---
 

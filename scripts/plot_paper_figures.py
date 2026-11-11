@@ -253,18 +253,14 @@ def main(argv=None) -> int:
     ap.add_argument("--out", default="results/paper", type=Path)
     a = ap.parse_args(argv)
 
-    # Figures 1 and 2 need the full radius sweep on the largest UCI samples available.
-    # results_upstream.csv carries that grid on instances resampled from the full pools
-    # (n = 1000, m = 200 and 400); results.csv is the fallback, but its UCI instances are
-    # the small bundled ones at n <= 500.
-    frames = []
-    for f in ("results/results_upstream.csv", "results/results.csv"):
-        if Path(f).exists():
-            frames.append(pd.read_csv(f))
-    m = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    # The figures need the full radius sweep on instances resampled from the full UCI
+    # pools (n = 1000, m = 200 and 400), which is what results_upstream.csv carries.
+    src = Path("results/results_upstream.csv")
+    if not src.exists():
+        raise SystemExit(f"{src} not found; run scripts/run_experiments.py first "
+                         "(see the Reproduce section of README.md)")
+    m = pd.read_csv(src)
     m = m[m.error.isna() | (m.error == "")]
-    if (m.dataset.str.startswith("upstream:")).any():
-        m = m[m.dataset.str.startswith("upstream:")]   # prefer the larger samples
     pal = PALETTE
     style(pal)
     a.out.mkdir(parents=True, exist_ok=True)
