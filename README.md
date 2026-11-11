@@ -8,22 +8,21 @@ serve `j` within a bounded multiple of it. This is *individual* fairness: the gu
 attaches to each client separately, rather than to a protected group in aggregate.
 
 Formally, given facilities `F` with opening costs `f_i`, clients `C` in a metric space,
-and radii `R_j`, we want to open `S ⊆ F` minimising
+and radii `R_j`, the problem is the constrained minimisation
 
 ```
-cost(S) = Σ_{i∈S} f_i + Σ_{j∈C} d(j, S),     d(j, S) = min_{i∈S} d(i, j)
+minimise    cost(S) = Σ_{i∈S} f_i + Σ_{j∈C} d(j, S),    d(j, S) = min_{i∈S} d(i, j)
+subject to  d(j, S) ≤ R_j                               for every j ∈ C
 ```
 
-compared against `OPT_fair`, the cheapest `S` with `d(j,S) ≤ R_j` for every client. An
-`(α, β)`-approximation costs at most `α·OPT_fair` and serves every client within `β·R_j`.
+over `S ⊆ F`; write `OPT_fair` for its optimum. The constraint is what makes this IFFL
+rather than plain facility location, and satisfying it exactly is hard, so two of the
+three algorithms here are **bicriteria**: an `(α, β)`-approximation costs at most
+`α·OPT_fair` while relaxing the constraint to `d(j, S) ≤ β·R_j`. Only Approach C meets
+it as stated, with `β = 1`.
 
-The objective is deliberately *not* restricted to `E_R`. The radii enter twice — in the
-benchmark `OPT_fair`, which must respect them exactly, and in the criterion `β` on the
-output — but a bicriteria solution serves some clients beyond their radius and must
-still pay for those connections, so restricting the sum would leave its cost undefined.
-Each client is served from the nearest open facility, which is what `d(j,S)` denotes; a
-strictly fair `S` has an open facility within `R_j`, so that assignment is automatically
-admissible.
+The radii constrain which `S` are feasible; they do not restrict the sum. A bicriteria
+solution still pays `d(j,S)` for every client, including those it serves beyond `R_j`.
 
 ---
 
