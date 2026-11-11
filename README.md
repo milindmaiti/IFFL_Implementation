@@ -11,11 +11,19 @@ Formally, given facilities `F` with opening costs `f_i`, clients `C` in a metric
 and radii `R_j`, we want to open `S ⊆ F` minimising
 
 ```
-cost(S) = Σ_{i∈S} f_i + Σ_{j∈C} d(j, S)
+cost(S) = Σ_{i∈S} f_i + Σ_{j∈C} d(j, S),     d(j, S) = min_{i∈S} d(i, j)
 ```
 
 compared against `OPT_fair`, the cheapest `S` with `d(j,S) ≤ R_j` for every client. An
 `(α, β)`-approximation costs at most `α·OPT_fair` and serves every client within `β·R_j`.
+
+The objective is deliberately *not* restricted to `E_R`. The radii enter twice — in the
+benchmark `OPT_fair`, which must respect them exactly, and in the criterion `β` on the
+output — but a bicriteria solution serves some clients beyond their radius and must
+still pay for those connections, so restricting the sum would leave its cost undefined.
+Each client is served from the nearest open facility, which is what `d(j,S)` denotes; a
+strictly fair `S` has an open facility within `R_j`, so that assignment is automatically
+admissible.
 
 ---
 
@@ -25,7 +33,7 @@ compared against `OPT_fair`, the cheapest `S` with `d(j,S) ≤ R_j` for every cl
 |---|---|---|---|
 | **method** | LP rounding | primal-dual (Jain–Vazirani style) | greedy with savings |
 | **fairness** | `d(j,S) ≤ 3R_j`, every outcome | `d(j,σ(j)) ≤ 3R` | `d(j,σ(j)) ≤ R_j` (**strict**) |
-| **cost** | `E[cost] ≤ 1.725·OPT_fair` | `C + 3F ≤ 3·OPT_LP` | 1.861 unrestricted; see note |
+| **cost** | `E[cost] ≤ 1.725·OPT_fair` | `C + 3F ≤ 3·OPT_LP` | **`Ω(log n)`** in the fair setting; see note |
 | **radii** | arbitrary **nonuniform** | **uniform only** | arbitrary |
 | **module** | [`iffl/lp_rounding.py`](iffl/lp_rounding.py) | [`iffl/primal_dual.py`](iffl/primal_dual.py) | [`iffl/greedy.py`](iffl/greedy.py) |
 
@@ -47,10 +55,18 @@ stated relative to `R_j`. We confirm this empirically below.
 **Approach C** is the odd one out in a useful way. Forbidding inadmissible pairs at
 every step makes it **strictly fair** — a radius ratio of 1, not 3 — so it is a
 `(ρ, 1)` algorithm against the others' `(1.725, 3)` and `(3, 3)`, and the question it
-answers is what that stricter fairness costs. Its 1.861 dual-fitting bound is for
-*unrestricted* UFL; the argument plausibly transfers, since the restricted dual
-constraint involves only `E_R` pairs, but nothing here asserts it — the ratio is
-measured like any other observable.
+answers is what that stricter fairness costs. That price is provably not constant:
+Theorem 2 of the paper rules out an `o(log n)` cost factor for *any* strictly fair
+polynomial-time algorithm unless `P = NP`, so C's worst-case factor is `Ω(log n)` —
+whereas A and B escape the bound only by being bicriteria. Its 1.861 dual-fitting bound
+is for *unrestricted* UFL and does not survive the restriction.
+
+[`scripts/run_hardness_study.py`](scripts/run_hardness_study.py) exhibits that growth:
+on the Set Cover family where greedy is `Θ(log q)` times optimal, C's ratio against the
+*true* fair optimum — known in closed form, so no LP bound is involved — follows
+`0.488·log₂(n) − 0.867` (R² = 0.9992) against the predicted `0.5·log₂(n) − 1`, reaching
+`6.0×` at `n = 16,380`. A and B stay at `1.0` throughout, which is the point: the lower
+bound binds only algorithms that satisfy every radius.
 
 ---
 
